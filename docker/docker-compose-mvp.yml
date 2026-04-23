@@ -1,0 +1,160 @@
+# Multi-Agent-Flow MVP 通用 Docker 配置
+# 版本：2026-04-21
+# 说明：此配置独立于 multi-agent-flow 和 knowledge-base 两个项目，可复用
+
+version: '3.8'
+
+services:
+  # ============================================
+  # OpenClaw Gateway（Agent运行时）
+  # 版本：2026.4.9（与knowledge-base保持一致）
+  # ============================================
+  openclaw-gateway:
+    image: ghcr.io/openclaw/openclaw:2026.4.9
+    container_name: maf-openclaw-gateway
+    restart: unless-stopped
+    ports:
+      - "18789:18789"
+    volumes:
+      # OpenClaw 配置目录（需提前准备）
+      - ./openclaw-config:/home/node/.openclaw
+      # 工作区目录
+      - ./workspace:/home/node/.openclaw/workspace
+    environment:
+      - OPENCLAW_HOME=/home/node/.openclaw
+      - OPENCLAW_WIKI_PATH=/home/node/.openclaw/workspace/wiki
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-qwen3.6-plus}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      - OPENCLAW_GATEWAY_BIND=auto
+    networks:
+      - maf-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:18789/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ============================================
+  # OpenMOSS（任务队列与审查流程）
+  # 版本：v1.1.3
+  # ============================================
+  openmoss:
+    image: python:3.11-slim
+    container_name: maf-openmoss
+    restart: unless-stopped
+    ports:
+      - "6565:6565"
+    volumes:
+      # OpenMOSS 代码目录（需提前克隆）
+      - ./openmoss:/app
+      # OpenMOSS 数据目录
+      - ./data/openmoss:/app/data
+    working_dir: /app
+    command: >
+      bash -c "
+        pip install -r requirements.txt &&
+        uvicorn app.main:app --host 0.0.0.0 --port 6565
+      "
+    environment:
+      - DATABASE_URL=sqlite:///data/openmoss.db
+      - REGISTRATION_TOKEN=${OPENMOSS_REGISTRATION_TOKEN:-maf_registration_token}
+      - ADMIN_PASSWORD=${OPENMOSS_ADMIN_PASSWORD:-admin123}
+    networks:
+      - maf-net
+    depends_on:
+      - openclaw-gateway
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:6565/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ============================================
+  # Backend（自研 - 任务模板、分解、派发）
+  # 技术栈：FastAPI + PostgreSQL + Redis
+  # ============================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: maf-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Backend 代码目录（开发模式）
+      - ./backend:/app
+      # 日志目录
+      - ./logs/backend:/app/logs
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://maf_user:maf_password@postgres:5432/maf_db
+      - REDIS_URL=redis://redis:6379/0
+      - OPENMOSS_BASE_URL=http://openmoss:6565
+      - OPENCLAW_BASE_URL=http://openclaw-gateway:18789
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - OPENMOSS_PLANNER_TOKEN=${OPENMOSS_PLANNER_TOKEN}
+      - OPENMOSS_EXECUTOR_TOKEN=${OPENMOSS_EXECUTOR_TOKEN}
+      - OPENMOSS_REVIEWER_TOKEN=${OPENMOSS_REVIEWER_TOKEN}
+    networks:
+      - maf-net
+    depends_on:
+      - postgres
+      - redis
+      - openmoss
+      - openclaw-gateway
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ============================================
+  # PostgreSQL（Backend数据库）
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: maf-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    environment:
+      - POSTGRES_DB=maf_db
+      - POSTGRES_USER=maf_user
+      - POSTGRES_PASSWORD=maf_password
+    networks:
+      - maf-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maf_user -d maf_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis（缓存层）
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: maf-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - maf-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  maf-net:
+    driver: bridge
