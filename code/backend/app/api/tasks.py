@@ -9,12 +9,16 @@ from sqlalchemy import select
 from typing import List, Optional
 from pydantic import BaseModel, Field
 import uuid
+import logging
 from datetime import datetime
 
 from app.core.database import get_db
 from app.models.task import TaskInstance, SubTaskRecord, TaskStatus, SubTaskStatus, DispatchStatus
 from app.core.dag_engine import DAGEngine
 from app.core.dispatcher import dispatcher
+from app.clients.openmoss_client import openmoss_client
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
@@ -137,6 +141,26 @@ async def create_sub_task(task_id: str, request: SubTaskCreateRequest, db: Async
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
+    # 步骤 1：先在 OpenMOSS 中创建子任务，获取 openmoss_id
+    openmoss_id = None
+    try:
+        om_response = await openmoss_client.create_sub_task(
+            task_id=task_id,
+            name=request.name,
+            assigned_agent=request.role,
+            description=request.instruction,
+            priority="medium"
+        )
+        openmoss_id = om_response.get("id") or om_response.get("sub_task_id")
+        if not openmoss_id:
+            logger.warning(f"OpenMOSS response missing id field: {om_response}")
+            openmoss_id = f"om_{task_id}_{str(uuid.uuid4())[:8]}"
+        logger.info(f"OpenMOSS sub-task created: {openmoss_id}")
+    except Exception as e:
+        logger.error(f"Failed to create OpenMOSS sub-task: {e}")
+        raise HTTPException(status_code=502, detail=f"OpenMOSS sub-task creation failed: {str(e)}")
+    
+    # 步骤 2：创建本地子任务记录
     sub_task_id = str(uuid.uuid4())
     conversation_id = f"task_{task_id}_sub_{sub_task_id[:8]}"
     
@@ -148,6 +172,7 @@ async def create_sub_task(task_id: str, request: SubTaskCreateRequest, db: Async
         instruction=request.instruction,
         dependencies=request.dependencies,
         conversation_id=conversation_id,
+        openmoss_id=openmoss_id,
         status=SubTaskStatus.ASSIGNED,
         dispatch_status=DispatchStatus.PUSHED
     )
@@ -156,11 +181,11 @@ async def create_sub_task(task_id: str, request: SubTaskCreateRequest, db: Async
     await db.commit()
     await db.refresh(sub_task)
     
-    # 派发任务
+    # 步骤 3：派发任务（推拉结合）
     try:
         dispatch_result = await dispatcher.dispatch_task(
             sub_task_id=sub_task_id,
-            openmoss_id="",  # TODO: 创建 OpenMOSS 子任务后获取 ID
+            openmoss_id=openmoss_id,
             role=request.role,
             instruction=request.instruction,
             conversation_id=conversation_id
@@ -169,6 +194,7 @@ async def create_sub_task(task_id: str, request: SubTaskCreateRequest, db: Async
         await db.commit()
     except Exception as e:
         # 派发失败，降级为 Pull 模式
+        logger.warning(f"Dispatch failed for sub-task {sub_task_id}: {e}")
         sub_task.dispatch_status = DispatchStatus.PENDING_PULL
         await db.commit()
     

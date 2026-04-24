@@ -6,16 +6,32 @@ SyncEngine - 状态同步引擎
 import asyncio
 import logging
 from typing import List, Dict, Any
+from sqlalchemy import select
 
 from app.config import get_settings
 from app.core.database import async_session
 from app.models.task import SubTaskRecord, SubTaskStatus, TaskInstance, TaskStatus
 from app.core.dag_engine import DAGEngine
 from app.core.dispatcher import dispatcher
+from app.clients.openmoss_client import openmoss_client
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+# OpenMOSS 状态到本地状态的映射
+OPENMOSS_STATUS_MAP = {
+    "done": SubTaskStatus.DONE,
+    "completed": SubTaskStatus.DONE,
+    "review": SubTaskStatus.REVIEW,
+    "in_progress": SubTaskStatus.IN_PROGRESS,
+    "running": SubTaskStatus.IN_PROGRESS,
+    "rework": SubTaskStatus.REWORK,
+    "rejected": SubTaskStatus.REWORK,
+    "blocked": SubTaskStatus.BLOCKED,
+    "assigned": SubTaskStatus.ASSIGNED,
+    "pending": SubTaskStatus.PENDING,
+}
 
 
 class SyncEngine:
@@ -39,7 +55,7 @@ class SyncEngine:
         async with async_session() as session:
             # 获取所有进行中的子任务
             result = await session.execute(
-                SubTaskRecord.__table__.select().where(
+                select(SubTaskRecord).where(
                     SubTaskRecord.status.in_([
                         SubTaskStatus.ASSIGNED,
                         SubTaskStatus.IN_PROGRESS,
@@ -47,10 +63,11 @@ class SyncEngine:
                     ])
                 )
             )
-            sub_tasks = result.fetchall()
+            sub_tasks = result.scalars().all()
             
-            for row in sub_tasks:
-                sub_task = SubTaskRecord(**row._mapping)
+            logger.info(f"Syncing {len(sub_tasks)} active sub-tasks")
+            
+            for sub_task in sub_tasks:
                 await self.sync_sub_task(session, sub_task)
             
             await session.commit()
@@ -58,33 +75,136 @@ class SyncEngine:
     async def sync_sub_task(self, session, sub_task: SubTaskRecord):
         """同步单个子任务状态"""
         if not sub_task.openmoss_id:
+            logger.warning(f"Sub-task {sub_task.id} has no openmoss_id, skipping")
             return  # 尚未创建 OpenMOSS 子任务
         
-        # TODO: 调用 OpenMOSS API 获取最新状态
-        # om_status = await openmoss_client.get_sub_task(sub_task.openmoss_id)
+        try:
+            # 调用 OpenMOSS API 获取最新状态
+            om_status = await openmoss_client.get_sub_task(sub_task.openmoss_id)
+            
+            # 状态映射
+            om_status_str = om_status.get("status", "").lower()
+            new_status = OPENMOSS_STATUS_MAP.get(om_status_str)
+            
+            if new_status and new_status != sub_task.status:
+                old_status = sub_task.status
+                sub_task.status = new_status
+                logger.info(
+                    f"Sub-task {sub_task.id} status changed: "
+                    f"{old_status.value} -> {new_status.value} "
+                    f"(OpenMOSS: {om_status_str})"
+                )
+                
+                # 如果任务完成，解锁依赖任务
+                if new_status == SubTaskStatus.DONE:
+                    await self._unlock_dependent_tasks(session, sub_task)
+                
+                # 如果任务被驳回，记录日志
+                elif new_status == SubTaskStatus.REWORK:
+                    logger.warning(f"Sub-task {sub_task.id} requires rework")
+                
+                # 如果任务被阻塞，记录日志
+                elif new_status == SubTaskStatus.BLOCKED:
+                    logger.warning(f"Sub-task {sub_task.id} is blocked")
         
-        # 模拟状态映射
-        # status_map = {
-        #     "done": SubTaskStatus.DONE,
-        #     "review": SubTaskStatus.REVIEW,
-        #     "in_progress": SubTaskStatus.IN_PROGRESS,
-        #     "rework": SubTaskStatus.REWORK,
-        #     "blocked": SubTaskStatus.BLOCKED
-        # }
-        # new_status = status_map.get(om_status["status"])
-        # if new_status and new_status != sub_task.status:
-        #     sub_task.status = new_status
-        #     if new_status == SubTaskStatus.DONE:
-        #         await self._unlock_dependent_tasks(session, sub_task)
-        pass
+        except Exception as e:
+            logger.error(f"Failed to sync sub-task {sub_task.id}: {e}")
+            # 不抛出异常，继续处理下一个任务
     
     async def _unlock_dependent_tasks(self, session, completed_task: SubTaskRecord):
         """解锁依赖当前任务的后续任务"""
         # 1. 获取父任务 DAG 快照
+        result = await session.execute(
+            select(TaskInstance).where(TaskInstance.id == completed_task.instance_id)
+        )
+        task_instance = result.scalar_one_or_none()
+        
+        if not task_instance:
+            logger.error(f"Task instance {completed_task.instance_id} not found")
+            return
+        
+        dag_snapshot = task_instance.dag_snapshot
+        if not dag_snapshot:
+            logger.warning(f"No DAG snapshot for task {completed_task.instance_id}")
+            return
+        
         # 2. 找出依赖当前任务的后续任务
-        # 3. 更新状态为 ASSIGNED
-        # 4. 调用 Dispatcher 派发
-        pass
+        dependent_tasks = dag_snapshot.get("tasks", [])
+        unlocked_count = 0
+        
+        for task_def in dependent_tasks:
+            task_id = task_def.get("id")
+            dependencies = task_def.get("dependencies", [])
+            
+            # 检查是否依赖当前完成的任务
+            if completed_task.id in dependencies or task_id == completed_task.id:
+                continue
+            
+            # 检查所有依赖是否都已完成
+            if completed_task.id in dependencies:
+                # 查询该子任务记录
+                dep_result = await session.execute(
+                    select(SubTaskRecord).where(
+                        SubTaskRecord.instance_id == completed_task.instance_id,
+                        SubTaskRecord.id == task_id
+                    )
+                )
+                dep_task = dep_result.scalar_one_or_none()
+                
+                if not dep_task:
+                    logger.warning(f"Dependent task {task_id} not found in database")
+                    continue
+                
+                # 检查所有依赖是否都已完成
+                all_deps_done = await self._check_all_dependencies_done(
+                    session, completed_task.instance_id, dep_task
+                )
+                
+                if all_deps_done and dep_task.status == SubTaskStatus.PENDING:
+                    # 解锁任务
+                    dep_task.status = SubTaskStatus.ASSIGNED
+                    unlocked_count += 1
+                    logger.info(f"Unlocked dependent task {dep_task.id}")
+                    
+                    # 调用 Dispatcher 派发任务
+                    try:
+                        dispatch_result = await dispatcher.dispatch_task(
+                            sub_task_id=dep_task.id,
+                            openmoss_id=dep_task.openmoss_id or "",
+                            role=dep_task.role,
+                            instruction=dep_task.instruction,
+                            conversation_id=dep_task.conversation_id
+                        )
+                        dep_task.dispatch_status = dispatch_result["status"]
+                        logger.info(f"Dispatched unlocked task {dep_task.id}: {dispatch_result['status']}")
+                    except Exception as e:
+                        logger.error(f"Failed to dispatch unlocked task {dep_task.id}: {e}")
+                        dep_task.dispatch_status = "failed"
+        
+        if unlocked_count > 0:
+            logger.info(f"Unlocked {unlocked_count} dependent tasks for {completed_task.instance_id}")
+    
+    async def _check_all_dependencies_done(self, session, instance_id, sub_task) -> bool:
+        """检查子任务的所有依赖是否都已完成"""
+        if not sub_task.dependencies:
+            return True  # 没有依赖
+        
+        # 查询所有依赖的子任务
+        dep_ids = sub_task.dependencies
+        result = await session.execute(
+            select(SubTaskRecord).where(
+                SubTaskRecord.instance_id == instance_id,
+                SubTaskRecord.id.in_(dep_ids)
+            )
+        )
+        dep_tasks = result.scalars().all()
+        
+        # 检查是否所有依赖都已完成
+        for dep_task in dep_tasks:
+            if dep_task.status != SubTaskStatus.DONE:
+                return False
+        
+        return True
 
 
 # 全局单例

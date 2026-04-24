@@ -1,0 +1,93 @@
+# 简单测试模板 - 用于验证模板加载和任务派发流程
+template_id: "simple_test"
+version: "1.0.0"
+description: "简单测试模板，包含两个串行任务，用于验证模板加载、实例化和任务派发流程"
+
+# 输入参数定义
+input_schema:
+  topic:
+    type: "string"
+    required: true
+    description: "任务主题"
+  target_audience:
+    type: "string"
+    required: false
+    default: "general"
+    description: "目标受众"
+
+# 任务节点列表（DAG 结构）
+tasks:
+  # 任务 1：内容研究
+  - task_id: "research"
+    name: "内容研究"
+    type: "fixed"
+    dependencies: []  # 无依赖，可立即执行
+    
+    # 角色与能力要求
+    target_role: "researcher"
+    required_capabilities: ["search", "analysis"]
+    required_skills: ["web_search", "summarization"]
+    
+    # 执行上下文
+    execution_context:
+      instruction: "请针对主题 '{{topic}}' 进行内容研究，目标受众是 '{{target_audience}}'。收集相关资料并整理关键信息。"
+      input_mapping:
+        topic: "{{inputs.topic}}"
+        target_audience: "{{inputs.target_audience}}"
+      output_format: "markdown"
+    
+    # 输出定义
+    output_definition:
+      type: "file"
+      format: "markdown"
+      path: "output/research_notes.md"
+    
+    # 验收标准
+    acceptance_criteria:
+      - "包含至少 5 个相关参考资料"
+      - "信息整理清晰，按主题分类"
+      - "输出格式为 Markdown"
+    
+    # 执行控制
+    control:
+      timeout: 600  # 10 分钟
+      retry_policy:
+        max_retries: 2
+
+  # 任务 2：内容撰写（依赖任务 1）
+  - task_id: "writing"
+    name: "内容撰写"
+    type: "fixed"
+    dependencies: ["research"]  # 依赖研究任务
+    
+    # 角色与能力要求
+    target_role: "writer"
+    required_capabilities: ["writing", "editing"]
+    required_skills: ["content_generation", "proofreading"]
+    
+    # 执行上下文
+    execution_context:
+      instruction: "基于研究笔记，撰写一篇关于 '{{topic}}' 的文章。目标受众是 '{{target_audience}}'。"
+      input_mapping:
+        research_notes: "output/research_notes.md"
+        topic: "{{inputs.topic}}"
+      output_format: "markdown"
+    
+    # 输出定义
+    output_definition:
+      type: "file"
+      format: "markdown"
+      path: "output/final_article.md"
+    
+    # 验收标准
+    acceptance_criteria:
+      - "文章结构完整（引言、正文、结论）"
+      - "语言流畅，无明显错误"
+      - "引用了研究笔记中的关键信息"
+      - "输出格式为 Markdown"
+    
+    # 执行控制
+    control:
+      timeout: 900  # 15 分钟
+      retry_policy:
+        max_retries: 2

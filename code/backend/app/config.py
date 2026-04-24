@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # 任务管理配置
     SYNC_INTERVAL_SECONDS: int = 300  # 状态同步间隔（5 分钟）
     MAX_RETRIES: int = 3  # 最大重试次数
+    DECOMPOSER_TIMEOUT: int = 600  # 分解任务超时（10 分钟）
     
     class Config:
         env_file = ".env"
