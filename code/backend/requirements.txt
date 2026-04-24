@@ -18,3 +18,8 @@ tenacity==8.2.3  # 重试机制（指数退避）
 
 # API限流依赖
 slowapi==0.1.9
+
+# 测试依赖
+pytest==8.0.0
+pytest-asyncio==0.23.0
+respx==0.21.1  # HTTP Mock 库（用于模拟 OpenMOSS/OpenClaw API）

@@ -80,11 +80,17 @@ class Dispatcher:
             return response.json()
     
     async def _pull_fallback(self, openmoss_id: str, role: str):
-        """备拉：在 OpenMOSS 中标记任务为 assigned，等待 Agent 轮询"""
-        # OpenMOSS 创建子任务时已设置 assigned_agent
-        # Agent 的 Cron 脚本会定期轮询 GET /api/sub-tasks/mine 发现新任务
-        # 此处无需额外 API 调用，仅记录日志用于追踪
-        logger.info(f"Pull fallback: task {openmoss_id} will be polled by {role} agent via Cron")
+        """备拉：在 OpenMOSS 中标记任务为 assigned，等待 Agent 轮询
+        
+        注意：OpenMOSS 创建子任务时已通过 assigned_agent 参数分配角色，
+        Agent 的 Cron 脚本会定期轮询 GET /api/sub-tasks/mine 发现新任务。
+        此处无需额外 API 调用，仅记录日志用于追踪。
+        """
+        logger.info(
+            f"Pull fallback: task {openmoss_id} already assigned to {role} at creation time. "
+            f"Agent will poll via Cron."
+        )
+        return {"status": "pending_pull"}
     
     async def dispatch_batch(self, sub_tasks: list) -> list:
         """
