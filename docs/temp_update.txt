@@ -1,0 +1,60 @@
+
+---
+
+## MVP-03-T01: OpenMOSS Agent 注册（2026-04-24 15:06）
+
+> **关联任务**: `MVP-03-T01`
+> **关联需求**: `REQ-20260421-002`
+> **状态**: 已完成（架构评审 9.17/10 通过）
+
+### 1. 设计目标
+
+注册 planner、executor、reviewer、patrol 角色到 OpenMOSS，获取 API Key 并自动写入 `.env` 文件。
+
+### 2. 核心设计
+
+**文件**：`scripts/register_agents.py`
+
+**功能特性**：
+- 调用 `POST /api/agents/register` 注册 Agent
+- 幂等性处理：捕获 400 错误，识别已存在 Agent
+- 重试机制：网络波动自动重试 3 次（指数退避）
+- CLI 参数：`--dry-run`（仅验证）、`--force`（强制重新注册）
+
+**代码片段**：
+```python
+# 注册 Agent（带重试）
+response = await client.post(
+    f"{OPENMOSS_BASE_URL}/api/agents/register",
+    headers={"X-Registration-Token": REGISTRATION_TOKEN},
+    json={"name": name, "role": role, "description": description}
+)
+
+# 幂等性处理
+if response.status_code == 400 and "exists" in response.text.lower():
+    print(f"⚠️  Agent 已存在：{name}")
+```
+
+### 3. 测试验证
+
+| TC 编号 | 测试内容 | 结果 |
+|:---|:---|:---:|
+| TC-REG-01 | 正常注册 | ✅ PASSED |
+| TC-REG-02 | 幂等处理 (已存在) | ✅ PASSED |
+| TC-REG-03 | 其他错误 | ✅ PASSED |
+| TC-REG-04 | 重试机制 | ✅ PASSED |
+| TC-REG-05 | 连接失败重试 | ✅ PASSED |
+
+### 4. 架构评审记录
+
+**评审 ID**: ARCH-MVP03-T01-REVIEW-002
+**评审日期**: 2026-04-24 15:05
+**综合评分**: 9.17/10 ✅ 通过
+
+**P1 整改**：
+1. ✅ 移除错误的 `check_agent_exists` 预检逻辑（鉴权死锁）
+2. ✅ 改为直接注册并捕获 400 错误实现幂等性
+
+---
+
+*文档维护规则：每轮对话结束后，将符合详细设计范畴的内容追加到本文件。*
