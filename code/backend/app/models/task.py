@@ -3,7 +3,7 @@
 
 包含 TaskInstance 和 SubTaskRecord 模型。
 """
-from sqlalchemy import Column, String, Text, Integer, DateTime, Enum, JSON, ForeignKey, Index
+from sqlalchemy import Column, String, Text, Integer, DateTime, Enum, JSON, ForeignKey, Index, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -73,6 +73,8 @@ class SubTaskRecord(Base):
     dependencies = Column(JSON, default=list, comment="依赖的子任务 ID 列表")
     retry_count = Column(Integer, default=0, comment="重试次数")
     dispatch_status = Column(Enum(DispatchStatus), default=DispatchStatus.PUSHED, comment="派发状态")
+    is_decomposition_task = Column(Boolean, default=False, comment="是否为动态分解任务")
+    decomposition_output = Column(Text, nullable=True, comment="分解任务返回的 JSON")
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
     

@@ -13,6 +13,7 @@ from app.core.database import async_session
 from app.models.task import SubTaskRecord, SubTaskStatus, TaskInstance, TaskStatus
 from app.core.dag_engine import DAGEngine
 from app.core.dispatcher import dispatcher
+from app.core.decomposer import Decomposer
 from app.clients.openmoss_client import openmoss_client
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ class SyncEngine:
     
     def __init__(self):
         self.sync_interval = settings.SYNC_INTERVAL_SECONDS  # 默认 300 秒（5 分钟）
+        self.decomposer = Decomposer()  # 用于处理动态任务分解完成通知
     
     async def start_sync_loop(self):
         """启动同步循环（后台任务）"""
@@ -95,9 +97,14 @@ class SyncEngine:
                     f"(OpenMOSS: {om_status_str})"
                 )
                 
-                # 如果任务完成，解锁依赖任务
+                # 如果任务完成，处理完成逻辑
                 if new_status == SubTaskStatus.DONE:
-                    await self._unlock_dependent_tasks(session, sub_task)
+                    # 检查是否为动态分解任务
+                    if getattr(sub_task, 'is_decomposition_task', False):
+                        await self._handle_decomposition_complete(session, sub_task, om_status)
+                    else:
+                        # 普通任务，解锁后续依赖
+                        await self._unlock_dependent_tasks(session, sub_task)
                 
                 # 如果任务被驳回，记录日志
                 elif new_status == SubTaskStatus.REWORK:
@@ -205,6 +212,54 @@ class SyncEngine:
                 return False
         
         return True
+    
+    async def _handle_decomposition_complete(
+        self, 
+        session, 
+        sub_task: SubTaskRecord, 
+        om_status: Dict
+    ):
+        """
+        处理动态分解任务完成
+        
+        Args:
+            session: 数据库会话
+            sub_task: 子任务记录
+            om_status: OpenMOSS 返回的状态信息
+        """
+        logger.info(f"Handling decomposition completion for {sub_task.id}")
+        
+        try:
+            # 1. 从 OpenMOSS 状态信息中获取输出
+            # 尝试多个可能的字段名称
+            output = (
+                om_status.get("output", "") or 
+                om_status.get("deliverable", "") or 
+                om_status.get("result", "") or
+                om_status.get("description", "")
+            )
+            
+            # 2. 保存到数据库
+            sub_task.decomposition_output = output
+            
+            # 3. 通知 Decomposer 任务完成
+            self.decomposer.notify_completion(
+                sub_task.openmoss_id,
+                {"output": output}
+            )
+            
+            logger.info(
+                f"Notified decomposition completion for {sub_task.openmoss_id}, "
+                f"output length: {len(output) if output else 0}"
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to handle decomposition complete for {sub_task.id}: {e}")
+            # 通知失败，标记任务为失败
+            self.decomposer.notify_failure(
+                sub_task.openmoss_id,
+                f"Failed to handle decomposition: {str(e)}"
+            )
 
 
 # 全局单例
