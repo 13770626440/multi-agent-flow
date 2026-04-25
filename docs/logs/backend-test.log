@@ -1,0 +1,25 @@
+﻿Starting Multi-Agent-Flow Backend v0.1.0
+OpenMOSS: http://openmoss:6565
+OpenClaw: http://openclaw-gateway:18789
+Database initialized
+Redis connected: redis:6379
+SyncEngine started, interval: 300s
+INFO:     127.0.0.1:38496 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49082 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58710 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40628 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39902 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45724 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36660 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     172.19.0.1:39110 - "POST /api/v1/tasks/ HTTP/1.1" 200 OK
+docker : Missing tokens for roles: ['planner', 'executor', 'reviewer', 'patrol', 'gateway']
+所在位置 行:1 字符: 246
++ ... ype Directory -Force; docker logs maf-backend --tail 100 2>&1 | Out-F ...
++                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Missing tokens ...ol', 'gateway']:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
