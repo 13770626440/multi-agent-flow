@@ -1,0 +1,27 @@
+﻿📋 **任务列表**（共 14 个任务）
+
+| # | 任务 ID | 名称 | 描述 | 模板 | 状态 | 创建时间 |
+|---|---------|------|------|------|------|----------|
+| 1 | `eb0f3b43` | 用户管理系统 | 使用 FastAPI + Vue3 的技术栈开发用户管理系统 | simple-dev-flow | ⏳ pending | 2026-04-25 13:20 |
+| 2 | `64cece98` | 用户管理系统 | 使用 FastAPI + Vue3 的技术栈开发用户管理系统 | simple-dev-flow | ⏳ pending | 2026-04-25 13:18 |
+| 3 | `e2bf72ad` | 用户管理系统 | 使用 FastAPI + Vue3 的技术栈开发用户管理系统 | simple-dev-flow | ⏳ pending | 2026-04-25 13:16 |
+| 4 | `c6251a4a` | 用户管理系统 | 基于 FastAPI + Vue3 技术栈开发用户管理系统 | simple-dev-flow | ⏳ pending | 2026-04-25 13:00 |
+| 5 | `3822e903` | 用户管理系统 | 基于 FastAPI + Vue3 技术栈开发用户管理系统 | simple-dev-flow | ⏳ pending | 2026-04-25 12:53 |
+| 6 | `f9ac5ab4` | 用户管理系统 | 使用 FastAPI + Vue3 的技术栈开发用户管理系统 | simple-dev-flow | ⏳ pending | 2026-04-25 12:50 |
+| 7 | `03c5678c` | 测试任务-模板实例化 | 测试模板实例化流程 | simple-dev-flow | ⏳ pending | 2026-04-25 12:43 |
+| 8 | `8cc205e6` | 测试任务-模板实例化 | 测试模板实例化流程 | simple-dev-flow | ⏳ pending | 2026-04-25 12:43 |
+| 9 | `861ebdab` | 用户管理系统 | 使用 FastAPI + Vue3 的技术栈开发用户管理系统 | simple-dev-flow | ⏳ pending | 2026-04-25 12:39 |
+| 10 | `0bba3d3d` | 用户管理系统开发 | — | simple-dev-flow | ⏳ pending | 2026-04-25 12:24 |
+| 11 | `530425dd` | 用户管理系统开发 | — | simple-dev-flow | ⏳ pending | 2026-04-25 11:23 |
+| 12 | `82ffab46` | 支付模块开发 | 对接微信支付 | default | ⏳ pending | 2026-04-25 06:36 |
+| 13 | `66f73ad1` | 用户登录接口开发 | 实现基于JWT的登录功能 | default | ⏳ pending | 2026-04-25 06:31 |
+| 14 | `a7b13e97` | 用户登录接口开发 | 实现基于JWT的登录功能 | default | ⏳ pending | 2026-04-25 03:42 |
+
+---
+
+**汇总：**
+- 全部任务均为 **pending（待开始）** 状态
+- 模板分布：`simple-dev-flow` × 11，`default` × 3
+- 有较多重复的「用户管理系统」任务，可能需要清理
+
+需要查询某个具体任务的进度、子任务列表，或对任务进行控制（暂停/取消/重试）吗？

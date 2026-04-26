@@ -30,6 +30,7 @@ class TaskCreateRequest(BaseModel):
     description: Optional[str] = Field(None, description="任务描述")
     template_id: Optional[str] = Field(None, description="关联的模板 ID")
     user_id: Optional[str] = Field(None, description="创建用户 ID")
+    input_params: Optional[dict] = Field(None, description="模板输入参数")
 
 
 class SubTaskCreateRequest(BaseModel):
@@ -37,6 +38,12 @@ class SubTaskCreateRequest(BaseModel):
     role: str = Field(..., description="执行角色")
     instruction: str = Field(..., description="任务指令")
     dependencies: List[str] = Field(default_factory=list, description="依赖的子任务 ID")
+
+
+class SubTaskCompleteRequest(BaseModel):
+    status: str = Field(default="done", description="完成状态 (done/failed)")
+    output_path: Optional[str] = Field(None, description="产出文件路径")
+    message: Optional[str] = Field(None, description="完成消息或错误信息")
 
 
 class TaskResponse(BaseModel):
@@ -69,15 +76,31 @@ class SubTaskResponse(BaseModel):
 
 @router.post("/", response_model=TaskResponse)
 async def create_task(request: TaskCreateRequest, db: AsyncSession = Depends(get_db)):
-    """创建任务实例"""
+    """创建任务实例（同步创建 OpenMOSS Task）"""
     task_id = str(uuid.uuid4())
     
+    # 步骤 1：在 OpenMOSS 中创建 Task
+    openmoss_task_id = None
+    try:
+        om_response = await openmoss_client.create_task(
+            name=request.name,
+            description=request.description or ""
+        )
+        openmoss_task_id = om_response.get("id")
+        logger.info(f"OpenMOSS task created: {openmoss_task_id}")
+    except Exception as e:
+        logger.warning(f"Failed to create OpenMOSS task: {e}")
+        # OpenMOSS 创建失败不阻塞 MAF 任务创建
+    
+    # 步骤 2：创建 MAF 任务实例
     task = TaskInstance(
         id=task_id,
         name=request.name,
         description=request.description,
         template_id=request.template_id,
         user_id=request.user_id,
+        input_params=request.input_params,
+        openmoss_task_id=openmoss_task_id,
         status=TaskStatus.PENDING
     )
     
@@ -141,14 +164,18 @@ async def create_sub_task(task_id: str, request: SubTaskCreateRequest, db: Async
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
+    # 使用 OpenMOSS task_id（如果存在）
+    openmoss_task_id = task.openmoss_task_id or task_id
+    
     # 步骤 1：先在 OpenMOSS 中创建子任务，获取 openmoss_id
     openmoss_id = None
     try:
         om_response = await openmoss_client.create_sub_task(
-            task_id=task_id,
+            task_id=openmoss_task_id,
             name=request.name,
-            assigned_agent=request.role,
             description=request.instruction,
+            deliverable="",
+            acceptance="",
             priority="medium"
         )
         openmoss_id = om_response.get("id") or om_response.get("sub_task_id")
@@ -199,6 +226,49 @@ async def create_sub_task(task_id: str, request: SubTaskCreateRequest, db: Async
         await db.commit()
     
     return sub_task
+
+
+@router.post("/{task_id}/sub-tasks/{sub_task_id}/complete")
+async def complete_sub_task(
+    task_id: str,
+    sub_task_id: str,
+    request: SubTaskCompleteRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Agent 汇报子任务完成
+    
+    由执行任务的 Agent 调用，更新子任务状态。
+    """
+    # 1. 查找子任务
+    result = await db.execute(
+        select(SubTaskRecord).where(
+            SubTaskRecord.id == sub_task_id,
+            SubTaskRecord.instance_id == task_id
+        )
+    )
+    sub_task = result.scalar_one_or_none()
+    
+    if not sub_task:
+        raise HTTPException(status_code=404, detail="Sub-task not found")
+    
+    # 2. 更新状态
+    if request.status == "done":
+        sub_task.status = SubTaskStatus.DONE
+    elif request.status == "failed":
+        sub_task.status = SubTaskStatus.FAILED
+    else:
+        sub_task.status = SubTaskStatus.DONE # 默认完成
+    
+    # 3. 保存产出路径和消息
+    if request.output_path:
+        sub_task.output = request.output_path
+    if request.message:
+        sub_task.instruction = sub_task.instruction + f"\n\n[Completion Message]: {request.message}"
+        
+    await db.commit()
+    
+    return {"message": f"Sub-task {sub_task_id} status updated to {sub_task.status.value}"}
 
 
 @router.post("/{task_id}/cancel")

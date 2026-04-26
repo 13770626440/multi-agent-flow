@@ -1,9 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
 from app.api.health import router as health_router
 from app.api.templates import router as templates_router
@@ -14,9 +11,6 @@ from app.core.sync_engine import sync_engine
 import asyncio
 
 settings = get_settings()
-
-# API限流中间件
-limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -76,10 +70,6 @@ app = FastAPI(
     debug=settings.DEBUG,
     lifespan=lifespan
 )
-
-# 注册限流
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS中间件
 app.add_middleware(

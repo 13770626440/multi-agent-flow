@@ -1,0 +1,24 @@
+﻿docker : Gateway agent failed; falling back to embedded: GatewayClientRequestError: FailoverError: No API key found for
+ provider "openai". Auth store: /home/node/.openclaw/agents/main/agent/auth-profiles.json (agentDir: /home/node/.opencl
+aw/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the mai
+n agentDir.
+所在位置 行:1 字符: 188
++ ... -Seconds 5; docker exec maf-openclaw-gateway openclaw agent --session ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Gateway agent f... main agentDir.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[diagnostic] lane task error: lane=main durationMs=567 error="Error: No API key found for provider "openai". Auth store
+: /home/node/.openclaw/agents/main/agent/auth-profiles.json (agentDir: /home/node/.openclaw/agents/main/agent). Configu
+re auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the main agentDir."
+[diagnostic] lane task error: lane=session:agent:main:explicit:test-e2e-retry-006 durationMs=570 error="Error: No API k
+ey found for provider "openai". Auth store: /home/node/.openclaw/agents/main/agent/auth-profiles.json (agentDir: /home/
+node/.openclaw/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json 
+from the main agentDir."
+[model-fallback] model fallback decision: decision=candidate_failed requested=openai/gpt-5.4 candidate=openai/gpt-5.4 r
+eason=auth next=none detail=No API key found for provider "openai". Auth store: /home/node/.openclaw/agents/main/agent/
+auth-profiles.json (agentDir: /home/node/.openclaw/agents/main/agent). Configure auth for this agent (openclaw agents a
+dd <id>) or copy auth-profiles.json from the main agentDir.
+FailoverError: No API key found for provider "openai". Auth store: /home/node/.openclaw/agents/main/agent/auth-profiles
+.json (agentDir: /home/node/.openclaw/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or c
+opy auth-profiles.json from the main agentDir.

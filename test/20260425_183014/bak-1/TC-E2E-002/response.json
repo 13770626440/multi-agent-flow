@@ -1,0 +1,151 @@
+﻿{
+    "template_id":  "simple-dev-flow",
+    "version":  "1.0.0",
+    "description":  "ç®åå¼åæµç¨æ¨¡æ¿ï¼å«åºå®ãå¨æãè¯å®¡èç¹ï¼æ¯æç¨æ·ç¡®è®¤ï¼",
+    "input_schema":  {
+                         "project_name":  {
+                                              "type":  "string",
+                                              "required":  true,
+                                              "default":  null,
+                                              "description":  "é¡¹ç®åç§°"
+                                          },
+                         "tech_stack":  {
+                                            "type":  "string",
+                                            "required":  false,
+                                            "default":  "FastAPI + Vue3 + PostgreSQL",
+                                            "description":  "ææ¯æ "
+                                        }
+                     },
+    "tasks":  [
+                  {
+                      "task_id":  "req-analysis",
+                      "name":  "éæ±åæ",
+                      "type":  "fixed",
+                      "dependencies":  [
+
+                                       ],
+                      "target_role":  "product-manager",
+                      "required_capabilities":  [
+
+                                                ],
+                      "required_skills":  [
+
+                                          ],
+                      "execution_context":  {
+                                                "instruction":  "è¯·åæ\"${input.project_name}\"çéæ±ï¼è¾åºéæ±ææ¡£ã\n\nå\u0085å«ï¼\n1. æ ¸å¿åè½åè¡¨\n2. éåè½æ§éæ±ï¼æ§è½ãå®å\u0085¨æ§ï¼\n3. ææ¯æ å»ºè®®ï¼${input.tech_stack}\n",
+                                                "input_mapping":  {
+
+                                                                  },
+                                                "output_format":  "markdown"
+                                            },
+                      "output_definition":  {
+                                                "type":  "file",
+                                                "format":  null,
+                                                "path":  "/workspace/req-analysis/prd.md"
+                                            },
+                      "acceptance_criteria":  [
+                                                  "è¾åºå®æ´ç PRD ææ¡£",
+                                                  "å\u0085å«è³å° 3 ä¸ªæ ¸å¿åè½"
+                                              ],
+                      "control":  null
+                  },
+                  {
+                      "task_id":  "dev-breakdown",
+                      "name":  "å¼åä»»å¡åè§£",
+                      "type":  "dynamic",
+                      "dependencies":  [
+                                           "req-analysis"
+                                       ],
+                      "target_role":  "tech-lead",
+                      "required_capabilities":  [
+
+                                                ],
+                      "required_skills":  [
+                                              "decomposer-skill",
+                                              "json-validator"
+                                          ],
+                      "execution_context":  {
+                                                "instruction":  "è¯·æ ¹æ®éæ±ææ¡£ï¼${req-analysis.output}ï¼ï¼å°\"${input.project_name}\"çå¼åä»»å¡åè§£ä¸ºå\u0085·ä½çå­ä»»å¡ã\n\nææ¯æ ï¼${input.tech_stack}\n\nè¦æ±ï¼\n1. æ¯ä¸ªå­ä»»å¡å¿\u0085é¡»æ¯åå­æ§çï¼å¯å¨ 2-4 å°æ¶å\u0085å®æï¼\n2. æç¡®å­ä»»å¡ä¹é´çä¾èµå\u0085³ç³»\n3. ä¸ºæ¯ä¸ªå­ä»»å¡åé\u0085è§è²ï¼backend/frontend/databaseï¼\n4. è¾åºåæ³ç JSON æ°ç»\n",
+                                                "input_mapping":  {
+                                                                      "requirement_doc":  "${req-analysis.output}",
+                                                                      "tech_stack":  "${input.tech_stack}"
+                                                                  },
+                                                "output_format":  "json"
+                                            },
+                      "output_definition":  {
+                                                "type":  "json",
+                                                "format":  null,
+                                                "path":  "/workspace/dev-breakdown/sub-tasks.json"
+                                            },
+                      "acceptance_criteria":  [
+
+                                              ],
+                      "control":  null
+                  },
+                  {
+                      "task_id":  "code-review",
+                      "name":  "ä»£ç å®¡æ¥",
+                      "type":  "review",
+                      "dependencies":  [
+                                           "dev-breakdown"
+                                       ],
+                      "target_role":  "reviewer",
+                      "required_capabilities":  [
+
+                                                ],
+                      "required_skills":  [
+
+                                          ],
+                      "execution_context":  {
+                                                "instruction":  "è¯·å®¡æ¥å¼åä»»å¡çäº§åºç©ã\n\nå®¡æ¥æ åï¼\n1. ä»£ç è´¨éï¼å½åè§èãæ³¨éãéè¯¯å¤çï¼\n2. åè½å®æ´æ§ï¼æ¯å¦æ»¡è¶³éªæ¶æ åï¼\n3. å®å\u0085¨æ§ï¼SQL æ³¨å\u0085¥ãXSS é²æ¤ï¼\n",
+                                                "input_mapping":  {
+                                                                      "codebase":  "${dev-breakdown.output}"
+                                                                  },
+                                                "output_format":  "markdown"
+                                            },
+                      "output_definition":  {
+                                                "type":  "file",
+                                                "format":  null,
+                                                "path":  "/workspace/code-review/review-report.md"
+                                            },
+                      "acceptance_criteria":  [
+                                                  "ææä»£ç éè¿éææ£æ¥",
+                                                  "æ  P0/P1 çº§å«å®å\u0085¨æ¼æ´",
+                                                  "åå\u0085æµè¯è¦çç \u003e 80%"
+                                              ],
+                      "control":  null
+                  },
+                  {
+                      "task_id":  "deploy",
+                      "name":  "é¨ç½²ä¸çº¿",
+                      "type":  "fixed",
+                      "dependencies":  [
+                                           "code-review"
+                                       ],
+                      "target_role":  "devops",
+                      "required_capabilities":  [
+
+                                                ],
+                      "required_skills":  [
+
+                                          ],
+                      "execution_context":  {
+                                                "instruction":  "è¯·å°é¡¹ç®é¨ç½²å°çäº§ç¯å¢ã\n\né¨ç½²æ­¥éª¤ï¼\n1. æå»º Docker éå\n2. è¿è¡æ°æ®åºè¿ç§»\n3. é¨ç½²å° Kubernetes éç¾¤\n4. éªè¯å¥åº·æ£æ¥\n",
+                                                "input_mapping":  {
+                                                                      "codebase":  "${code-review.output}"
+                                                                  },
+                                                "output_format":  "markdown"
+                                            },
+                      "output_definition":  {
+                                                "type":  "file",
+                                                "format":  null,
+                                                "path":  "/workspace/deploy/deploy-log.md"
+                                            },
+                      "acceptance_criteria":  [
+                                                  "é¨ç½²æåï¼å¥åº·æ£æ¥éè¿",
+                                                  "æ éè¯¯æ¥å¿"
+                                              ],
+                      "control":  null
+                  }
+              ]
+}

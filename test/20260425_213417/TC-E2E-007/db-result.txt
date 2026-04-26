@@ -1,0 +1,7 @@
+﻿                  id                  |             instance_id              |   name   |      role       | status  |             openmoss_id              
+--------------------------------------+--------------------------------------+----------+-----------------+---------+--------------------------------------
+ 9a741a65-f838-447e-8eb7-2bcc01d4724d | 1e376624-bae4-411c-9b8d-8d0bae97aa92 | 需求分析 | product-manager | PENDING | 69ad3b6e-d4ab-4a28-9dc1-9ea34353a09d
+ 6fa29ee3-a7e3-46a1-8070-7380f15ab973 | eb0f3b43-9b1f-4ebd-ba98-c41c32176d53 | 需求分析 | product-manager | PENDING | 0f864b26-6984-467c-8869-eb0195b40fb0
+ 458cad23-f532-4152-99e5-9103563fe2b0 | c6251a4a-2bb8-4a7c-94a8-883f35d0b2ab | 需求分析 | product-manager | PENDING | 7e42c592-8cd5-41d9-8825-5f4db719a630
+(3 rows)
+

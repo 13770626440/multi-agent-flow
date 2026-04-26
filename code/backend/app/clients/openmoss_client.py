@@ -25,8 +25,27 @@ class OpenMOSSClient:
         self.timeout = 10.0
     
     def _get_headers(self, role: str) -> Dict[str, str]:
-        """获取请求头"""
-        return token_manager.get_headers(role)
+        """获取请求头（OpenMOSS 使用 Authorization Bearer）"""
+        token = token_manager.get_token(role)
+        return {"Authorization": f"Bearer {token}"}
+
+    async def create_task(
+        self,
+        name: str,
+        description: str = "",
+        task_type: str = "once"
+    ) -> Dict[str, Any]:
+        """
+        创建任务 (Planner 调用)
+        """
+        url = f"{self.base_url}/api/tasks"
+        payload = {
+            "name": name,
+            "description": description,
+            "type": task_type
+        }
+        logger.info(f"Creating task in OpenMOSS: {name}")
+        return await self._request("POST", url, "planner", json=payload)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -56,24 +75,30 @@ class OpenMOSSClient:
         self,
         task_id: str,
         name: str,
-        assigned_agent: str,
         description: Optional[str] = None,
+        deliverable: Optional[str] = None,
         acceptance: Optional[str] = None,
-        priority: str = "medium"
+        priority: str = "medium",
+        assigned_agent: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         创建子任务 (Planner 调用)
+        注意：assigned_agent 需要是 Agent ID，不是角色名称。
+        如果不传递，子任务状态为 pending，等待 Agent 认领。
         """
         url = f"{self.base_url}/api/sub-tasks"
         payload = {
             "task_id": task_id,
             "name": name,
-            "assigned_agent": assigned_agent,
             "description": description or "",
+            "deliverable": deliverable or "",
             "acceptance": acceptance or "",
             "priority": priority,
             "type": "once"
         }
+        if assigned_agent:
+            payload["assigned_agent"] = assigned_agent
+        
         logger.info(f"Creating sub-task: {name} for task {task_id}")
         return await self._request("POST", url, "planner", json=payload)
     

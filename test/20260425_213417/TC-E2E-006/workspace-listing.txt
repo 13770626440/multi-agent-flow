@@ -1,0 +1,4 @@
+﻿total 16
+drwxr-xr-x 2 node node 4096 Apr 25 11:25 .
+drwxr-xr-x 8 node node 4096 Apr 25 11:24 ..
+-rw-r--r-- 1 node node 5978 Apr 25 12:30 prd.md

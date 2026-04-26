@@ -1,0 +1,27 @@
+﻿📋 **任务列表（共 15 个任务）**
+
+| # | 任务名称 | 描述 | 状态 | 模板 | 创建时间 |
+|---|---------|------|------|------|---------|
+| 1 | 订单管理系统 | 使用 Spring Boot + React 技术栈开发订单管理系统 | ⏳ pending | simple-dev-flow | 13:35 |
+| 2 | 用户管理系统 | 使用 FastAPI + Vue3 的技术栈开发用户管理系统 | ❌ cancelled | simple-dev-flow | 13:20 |
+| 3 | 用户管理系统 | 使用 FastAPI + Vue3 的技术栈开发用户管理系统 | ⏳ pending | simple-dev-flow | 13:18 |
+| 4 | 用户管理系统 | 使用 FastAPI + Vue3 的技术栈开发用户管理系统 | ⏳ pending | simple-dev-flow | 13:16 |
+| 5 | 用户管理系统 | 基于 FastAPI + Vue3 技术栈开发用户管理系统 | ⏳ pending | simple-dev-flow | 13:00 |
+| 6 | 用户管理系统 | 基于 FastAPI + Vue3 技术栈开发用户管理系统 | ⏳ pending | simple-dev-flow | 12:53 |
+| 7 | 用户管理系统 | 使用 FastAPI + Vue3 技术栈开发用户管理系统 | ⏳ pending | simple-dev-flow | 12:50 |
+| 8 | 测试任务-模板实例化 | 测试模板实例化流程 | ⏳ pending | simple-dev-flow | 12:43 |
+| 9 | 测试任务-模板实例化 | 测试模板实例化流程 | ⏳ pending | simple-dev-flow | 12:43 |
+| 10 | 用户管理系统 | 使用 FastAPI + Vue3 技术栈开发用户管理系统 | ⏳ pending | simple-dev-flow | 12:39 |
+| 11 | 用户管理系统开发 | — | ⏳ pending | simple-dev-flow | 12:24 |
+| 12 | 用户管理系统开发 | — | ⏳ pending | simple-dev-flow | 11:23 |
+| 13 | 支付模块开发 | 对接微信支付 | ⏳ pending | default | 06:36 |
+| 14 | 用户登录接口开发 | 实现基于JWT的登录功能 | ⏳ pending | default | 06:31 |
+| 15 | 用户登录接口开发 | 实现基于JWT的登录功能 | ⏳ pending | default | 03:42 |
+
+**统计：**
+- ⏳ 待开始 (pending)：14 个
+- ❌ 已取消 (cancelled)：1 个
+- 🔄 执行中 (in_progress)：0 个
+- ✅ 已完成 (completed)：0 个
+
+需要查询某个具体任务的详情或子任务进度吗？

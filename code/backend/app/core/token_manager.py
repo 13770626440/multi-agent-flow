@@ -25,10 +25,10 @@ class TokenManager:
     
     def __init__(self):
         self._tokens: dict[str, str] = {
-            "planner": os.getenv("OPENMOSS_PLANNER_TOKEN", ""),
-            "executor": os.getenv("OPENMOSS_EXECUTOR_TOKEN", ""),
-            "reviewer": os.getenv("OPENMOSS_REVIEWER_TOKEN", ""),
-            "patrol": os.getenv("OPENMOSS_PATROL_TOKEN", ""),
+            "planner": os.getenv("OPENMOSS_TOKEN_PLANNER", "") or os.getenv("OPENMOSS_PLANNER_TOKEN", ""),
+            "executor": os.getenv("OPENMOSS_TOKEN_EXECUTOR", "") or os.getenv("OPENMOSS_EXECUTOR_TOKEN", ""),
+            "reviewer": os.getenv("OPENMOSS_TOKEN_REVIEWER", "") or os.getenv("OPENMOSS_REVIEWER_TOKEN", ""),
+            "patrol": os.getenv("OPENMOSS_TOKEN_PATROL", "") or os.getenv("OPENMOSS_PATROL_TOKEN", ""),
             "gateway": os.getenv("OPENCLAW_GATEWAY_TOKEN", ""),
         }
         self._lock = asyncio.Lock()

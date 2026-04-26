@@ -1,0 +1,166 @@
+# templates/simple-dev-flow.yaml
+template_id: "simple-dev-flow"
+version: "1.0.0"
+description: "简单开发流程模板（含固定、动态、评审节点，支持用户确认）"
+
+# 全局输入
+input_schema:
+  project_name:
+    type: string
+    required: true
+    description: "项目名称"
+  tech_stack:
+    type: string
+    default: "FastAPI + Vue3 + PostgreSQL"
+    description: "技术栈"
+
+tasks:
+  # ===== 节点 1：需求分析（固定任务）=====
+  - task_id: "req-analysis"
+    name: "需求分析"
+    type: fixed
+    dependencies: []
+    target_role: "product-manager"
+    
+    execution_context:
+      instruction: |
+        请分析"${input.project_name}"的需求，输出需求文档。
+        
+        包含：
+        1. 核心功能列表
+        2. 非功能性需求（性能、安全性）
+        3. 技术栈建议：${input.tech_stack}
+        
+        **存储路径**: 请将文档保存至当前任务的工作目录下的 `req-analysis/prd.md`。
+        完整路径示例: `/workspace/{task_id}/req-analysis/prd.md`
+      output_format: "markdown"
+    
+    output_definition:
+      type: "file"
+      path: "/workspace/{task_id}/req-analysis/prd.md"
+    
+    input_mapping: {}
+    
+    acceptance_criteria:
+      - "输出完整的 PRD 文档"
+      - "包含至少 3 个核心功能"
+    
+    # 用户确认配置
+    user_confirmation:
+      required: true
+      prompt: "需求分析已完成，请确认是否继续？"
+      timeout: 3600  # 1 小时超时
+
+  # ===== 节点 2：开发任务分解（动态任务）=====
+  - task_id: "dev-breakdown"
+    name: "开发任务分解"
+    type: dynamic
+    dependencies: ["req-analysis"]
+    target_role: "tech-lead"
+    required_skills: ["decomposer-skill", "json-validator"]
+    
+    execution_context:
+      instruction: |
+        请根据需求文档（${req-analysis.output}），将"${input.project_name}"的开发任务分解为具体的子任务。
+        
+        技术栈：${input.tech_stack}
+        
+        要求：
+        1. 每个子任务必须是原子性的（可在 2-4 小时内完成）
+        2. 明确子任务之间的依赖关系
+        3. 为每个子任务分配角色（backend/frontend/database）
+        4. 输出合法的 JSON 数组
+      
+      input_mapping:
+        requirement_doc: "${req-analysis.output}"
+        tech_stack: "${input.tech_stack}"
+      
+      output_format: "json"
+    
+    output_definition:
+      type: "json"
+      path: "/home/node/.openclaw/workspace/dev-breakdown/sub-tasks.json"
+      schema:
+        type: array
+        items:
+          type: object
+          properties:
+            name: {type: string}
+            role: {type: string, enum: ["backend", "frontend", "database"]}
+            instruction: {type: string}
+            dependencies: {type: array, items: {type: string}}
+          required: ["name", "role", "instruction"]
+    
+    # 用户确认配置
+    user_confirmation:
+      required: true
+      prompt: "任务分解已完成，请确认分解结果是否合理？"
+      timeout: 3600
+
+  # ===== 节点 3：代码审查（评审任务）=====
+  - task_id: "code-review"
+    name: "代码审查"
+    type: review
+    dependencies: ["dev-breakdown"]
+    target_role: "reviewer"
+    
+    execution_context:
+      instruction: |
+        请审查开发任务的产出物。
+        
+        审查标准：
+        1. 代码质量（命名规范、注释、错误处理）
+        2. 功能完整性（是否满足验收标准）
+        3. 安全性（SQL 注入、XSS 防护）
+      input_mapping:
+        codebase: "${dev-breakdown.output}"
+      output_format: "markdown"
+    
+    output_definition:
+      type: "file"
+      path: "/home/node/.openclaw/workspace/code-review/review-report.md"
+    
+    acceptance_criteria:
+      - "所有代码通过静态检查"
+      - "无 P0/P1 级别安全漏洞"
+      - "单元测试覆盖率 > 80%"
+    
+    # 用户确认配置
+    user_confirmation:
+      required: true
+      prompt: "代码审查已完成，请确认审查结果？"
+      timeout: 3600
+
+  # ===== 节点 4：部署上线（固定任务）=====
+  - task_id: "deploy"
+    name: "部署上线"
+    type: fixed
+    dependencies: ["code-review"]
+    target_role: "devops"
+    
+    execution_context:
+      instruction: |
+        请将项目部署到生产环境。
+        
+        部署步骤：
+        1. 构建 Docker 镜像
+        2. 运行数据库迁移
+        3. 部署到 Kubernetes 集群
+        4. 验证健康检查
+      input_mapping:
+        codebase: "${code-review.output}"
+      output_format: "markdown"
+    
+    output_definition:
+      type: "file"
+      path: "/home/node/.openclaw/workspace/deploy/deploy-log.md"
+    
+    acceptance_criteria:
+      - "部署成功，健康检查通过"
+      - "无错误日志"
+    
+    # 用户确认配置
+    user_confirmation:
+      required: true
+      prompt: "部署已完成，请确认服务是否正常运行？"
+      timeout: 3600

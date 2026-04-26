@@ -46,6 +46,8 @@ class TaskInstance(Base):
     template_id = Column(String(36), nullable=True, comment="关联的模板 ID")
     name = Column(String(255), nullable=False, comment="任务名称")
     description = Column(Text, nullable=True, comment="任务描述")
+    input_params = Column(JSON, nullable=True, comment="模板输入参数")
+    openmoss_task_id = Column(String(36), nullable=True, comment="OpenMOSS 任务 ID")
     status = Column(Enum(TaskStatus), default=TaskStatus.PENDING, comment="任务状态")
     dag_snapshot = Column(JSON, nullable=True, comment="DAG 完整快照")
     user_id = Column(String(36), nullable=True, comment="创建用户 ID")

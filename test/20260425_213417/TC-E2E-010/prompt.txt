@@ -1,0 +1,3 @@
+﻿✅ **需求分析** 节点已完成。产出文件已保存至 `/home/node/.openclaw/workspace/req-analysis/prd.md`。
+
+是否继续执行下一个节点（**任务分解**）？

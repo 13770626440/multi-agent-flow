@@ -1,0 +1,46 @@
+﻿先查询任务详情和现有子任务状态。
+任务已确认，目前没有任何子任务。现在创建「需求分析」子任务。
+OpenMOSS 返回 422，可能是请求格式问题。让我查看可用的模板和 API 结构。
+`SubTaskCreateRequest` 不需要 `output_path` 字段，这就是 422 的原因。根据模板中的 `req-analysis` 节点定义，用正确的字段重试。
+OpenMOSS 那边返回 422。让我看看 OpenMOSS 的 API 期望什么格式。
+OpenMOSS 的 `SubTaskCreateRequest` 需要的字段和 MAF 转发的不同。OpenMOSS 需要 `task_id` + `name`，用 `description`/`deliverable`/`acceptance` 替代了 `role`/`instruction`。让我先确认 OpenMOSS 中是否有对应的主任务，然后尝试正确的格式。
+现在清楚了 — MAF 后端要求 `name` + `role` + `instruction`，但转发给 OpenMOSS 时字段不匹配。让我试一次完整调用，同时包含所有必要字段：
+经过多次尝试，我确认了问题根因。下面是详细分析：
+
+---
+
+**❌ 需求分析子任务创建失败 — 根因是 MAF Backend 与 OpenMOSS 的字段映射 Bug**
+
+**任务信息：**
+- 任务 ID：`861ebdab-df19-4d1d-ae7d-fed324d18a55`
+- 名称：用户管理系统
+- 模板：`simple-dev-flow`
+- 状态：`pending`
+
+**问题链：**
+
+1. MAF Backend 的 `SubTaskCreateRequest` 需要字段：`name` + `role` + `instruction`
+2. OpenMOSS 的 `SubTaskCreateRequest` 需要字段：`task_id` + `name` + `description` + `deliverable` + `acceptance`
+3. MAF Backend 收到请求后，**直接将原始字段转发给 OpenMOSS**，未做字段映射转换
+4. OpenMOSS 收到 `{role, instruction}` 等不认识的字段 → 返回 `422 Unprocessable Entity`
+5. MAF Backend 捕获到 OpenMOSS 的错误 → 整个子任务创建回滚（本地数据库也未写入）
+
+**期望的正确映射应该是：**
+| MAF Backend 字段 | OpenMOSS 字段 |
+|---|---|
+| `name` | `name` |
+| `role` | `assigned_agent` |
+| `instruction` | `description` |
+| — | `task_id`（从 URL path 注入） |
+| — | `deliverable` / `acceptance` / `priority`（需补充） |
+
+**需要修复的地方：** MAF Backend 的 `POST /api/v1/tasks/{task_id}/sub-tasks` 接口中，调用 OpenMOSS `POST /api/sub-tasks` 之前需要做字段映射转换。
+
+---
+
+要继续推进的话，有几个选项：
+1. **修复 MAF Backend 代码**（推荐） — 修改 sub-task 创建逻辑，做字段映射
+2. **给 OpenMOSS 加免认证路径** — 让我直接调用 OpenMOSS API
+3. **你手动在 OpenMOSS 创建子任务** — 如果可以直接访问 OpenMOSS 后台
+
+需要我协助哪种方式？

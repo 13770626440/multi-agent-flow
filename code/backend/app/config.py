@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     OPENMOSS_BASE_URL: str = "http://openmoss:6565"
     OPENCLAW_BASE_URL: str = "http://openclaw-gateway:18789"
     
+    # OpenMOSS Token 配置
+    OPENMOSS_TOKEN_PLANNER: Optional[str] = None
+    OPENMOSS_TOKEN_EXECUTOR: Optional[str] = None
+    OPENMOSS_TOKEN_REVIEWER: Optional[str] = None
+    OPENMOSS_TOKEN_PATROL: Optional[str] = None
+    
     # 模板配置
     TEMPLATE_DIR: str = "/app/templates"
     TEMPLATE_DEBOUNCE_SECONDS: float = 1.0  # 文件变更防抖动时间（秒）
