@@ -17,7 +17,7 @@ import asyncio
 import httpx
 import argparse
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 from dotenv import load_dotenv, set_key, find_dotenv
 
 # 加载 .env 文件
@@ -31,33 +31,12 @@ REGISTRATION_TOKEN = os.getenv("OPENMOSS_REGISTRATION_TOKEN", "default-registrat
 ROLES = ["planner", "executor", "reviewer", "patrol"]
 
 
-async def check_agent_exists(agent_name: str) -> Optional[Dict]:
-    """检查 Agent 是否已注册"""
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(
-                f"{OPENMOSS_BASE_URL}/api/agents",
-                headers={"X-Agent-Key": REGISTRATION_TOKEN}
-            )
-            if response.status_code == 200:
-                agents = response.json()
-                for agent in agents:
-                    if agent["name"] == agent_name:
-                        return agent
-        except Exception as e:
-            print(f"⚠️  检查 Agent 失败：{e}")
-    return None
-
-
 async def register_agent(name: str, role: str, description: str, force: bool = False) -> Dict:
-    """注册单个 Agent"""
-    # 1. 幂等性检查
-    if not force:
-        existing = await check_agent_exists(name)
-        if existing:
-            print(f"✅ Agent 已存在：{name} ({role})")
-            return {"id": existing["id"], "name": name, "role": role, "api_key": existing.get("api_key", "")}
-    
+    """注册单个 Agent
+
+    幂等性策略：直接注册，捕获 400 错误识别已存在 Agent。
+    不再使用 check_agent_exists 预检（会导致鉴权死锁）。
+    """
     # 2. 注册 Agent（带重试）
     max_retries = 3
     for attempt in range(max_retries):

@@ -2,17 +2,20 @@
 模板加载器
 
 负责监控 templates/ 目录，自动加载 YAML 模板文件，进行校验后存入 Redis 缓存。
+并在加载成功后触发 Agent 动态供给机制。
 """
 import os
 import time
 import yaml
 import json
+import asyncio
 import logging
 from typing import Dict, Optional
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from app.schemas.template import TemplateSchema
 from app.core.redis_client import redis_client
+from app.core.agent_provisioner import agent_provisioner
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -105,7 +108,7 @@ class TemplateLoader:
         return count
     
     def load_template(self, file_path: str) -> bool:
-        """加载单个模板文件"""
+        """加载单个模板文件（同步方法，用于 Watchdog 回调）"""
         try:
             logger.info(f"Loading template from {file_path}")
             
@@ -127,6 +130,10 @@ class TemplateLoader:
             if redis_client.set(redis_key, template_data):
                 self._templates[template.template_id] = template
                 logger.info(f"Template {template.template_id} v{template.version} loaded successfully")
+                
+                # 触发 Agent 动态供给（异步）
+                self._trigger_agent_provisioning(template_data)
+                
                 return True
             else:
                 logger.error(f"Failed to save template to Redis: {template.template_id}")
@@ -141,6 +148,29 @@ class TemplateLoader:
         except Exception as e:
             logger.error(f"Failed to load template {file_path}: {e}")
             return False
+
+    def _trigger_agent_provisioning(self, template_data: Dict):
+        """
+        触发 Agent 动态供给。
+        由于 Watchdog 运行在独立线程，这里需要安全地调度异步任务。
+        """
+        roles = template_data.get("roles", {})
+        if not roles:
+            return
+
+        try:
+            # 尝试获取当前事件循环
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                for role_name, config in roles.items():
+                    model = config.get("model", "qwen3.6-plus")
+                    asyncio.ensure_future(agent_provisioner.ensure_role_exists(role_name, model))
+            else:
+                # 如果没有运行中的循环（不太可能发生在 Watchdog 中，但防御性编程）
+                pass 
+        except RuntimeError:
+            # 没有事件循环
+            logger.warning("No running event loop to trigger agent provisioning.")
     
     def get_template(self, template_id: str) -> Optional[TemplateSchema]:
         """获取模板"""

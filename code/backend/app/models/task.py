@@ -29,6 +29,7 @@ class SubTaskStatus(str, enum.Enum):
     DONE = "done"
     REWORK = "rework"
     BLOCKED = "blocked"
+    FAILED = "failed"
 
 
 class DispatchStatus(str, enum.Enum):

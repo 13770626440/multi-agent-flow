@@ -10,7 +10,7 @@ import respx
 import httpx
 import asyncio
 from unittest.mock import patch, MagicMock
-from scripts.register_agents import register_agent, check_agent_exists
+from scripts.register_agents import register_agent
 
 
 class TestAgentRegistration:
@@ -71,30 +71,4 @@ class TestAgentRegistration:
         assert call_count[0] == 3
         assert result["api_key"] == "sk_executor_xxx"
     
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_check_agent_exists(self):
-        """TC-REG-04: 检查 Agent 是否存在"""
-        respx.get("http://openmoss:6565/api/agents").mock(
-            return_value=httpx.Response(200, json=[
-                {"id": "agent_001", "name": "planner-001", "role": "planner"},
-                {"id": "agent_002", "name": "executor-001", "role": "executor"}
-            ])
-        )
-        
-        result = await check_agent_exists("planner-001")
-        
-        assert result is not None
-        assert result["name"] == "planner-001"
-    
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_check_agent_not_exists(self):
-        """TC-REG-05: Agent 不存在"""
-        respx.get("http://openmoss:6565/api/agents").mock(
-            return_value=httpx.Response(200, json=[])
-        )
-        
-        result = await check_agent_exists("nonexistent")
-        
-        assert result is None
+

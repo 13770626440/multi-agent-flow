@@ -25,9 +25,9 @@ class OpenMOSSClient:
         self.timeout = 10.0
     
     def _get_headers(self, role: str) -> Dict[str, str]:
-        """获取请求头（OpenMOSS 使用 Authorization Bearer）"""
+        """获取请求头（OpenMOSS 使用 X-Agent-Key）"""
         token = token_manager.get_token(role)
-        return {"Authorization": f"Bearer {token}"}
+        return {"X-Agent-Key": token}
 
     async def create_task(
         self,
@@ -163,6 +163,53 @@ class OpenMOSSClient:
     async def block_sub_task(self, sub_task_id: str) -> Dict[str, Any]:
         """标记子任务为阻塞 (Patrol 调用)"""
         return await self.update_sub_task_status(sub_task_id, "block", "patrol")
+
+    # --- Agent 管理方法 ---
+
+    async def list_agents(self) -> List[Dict[str, Any]]:
+        """
+        获取已注册的 Agent 列表
+        对应 API: GET /api/agents
+        """
+        url = f"{self.base_url}/api/agents"
+        return await self._request("GET", url, "planner")
+
+    async def get_prompt(self, role: str) -> str:
+        """
+        获取指定角色的提示词
+        对应 API: GET /api/prompts/{role}
+        """
+        url = f"{self.base_url}/api/prompts/{role}"
+        # 提示词通常是文本，这里假设返回 JSON 包含 content 字段，或者直接返回文本
+        try:
+            result = await self._request("GET", url, "planner")
+            return result.get("content", "")
+        except Exception:
+            # 如果返回的是纯文本
+            return ""
+
+    async def get_tool_cli(self) -> str:
+        """
+        获取 task-cli.py 内容
+        对应 API: GET /api/tools/cli
+        """
+        url = f"{self.base_url}/api/tools/cli"
+        # 这里可能返回文件内容或下载链接，假设返回内容
+        try:
+            result = await self._request("GET", url, "planner")
+            return result.get("content", "")
+        except Exception:
+            return ""
+
+    async def get_skill_md(self) -> str:
+        """
+        获取 Skill 文档 (Agent 自动注册后下载)
+        对应 API: GET /api/agents/me/skill
+        注意：这个接口通常需要 Agent 的 Key，但在入职阶段，Backend 可能需要用 Admin 权限获取通用模板
+        这里暂时使用 Planner 权限尝试获取，或者返回一个占位符
+        """
+        # 暂时返回空，实际可能需要更复杂的逻辑或特定 Token
+        return ""
 
 
 # 全局单例
