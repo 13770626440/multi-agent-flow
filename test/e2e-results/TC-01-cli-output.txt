@@ -1,0 +1,39 @@
+﻿Let me先了解一下工作区里有什么模板和相关配置。
+没有找到内置的 "simple-dev-flow" 模板，我直接帮你搭一个完整的项目结构：Go 后端 + React 前端，包含开发流程的基本骨架。
+Now let me create all the project files:
+项目已创建完成 ✅ 位于 `文件路径测试/`，已 git commit。
+
+**20 个文件，结构如下：**
+
+```
+文件路径测试/
+├── backend/                    # Go 后端 (Gin)
+│   ├── cmd/server/main.go      # 入口
+│   ├── go.mod
+│   └── internal/
+│       ├── config/config.go    # 配置
+│       ├── handler/            # 路由 + 处理器 (health, file CRUD)
+│       └── model/file.go       # 数据模型
+├── frontend/                   # React + TypeScript + Vite
+│   ├── package.json
+│   ├── vite.config.ts          # 代理 /api → :8080
+│   └── src/
+│       ├── App.tsx             # 主页面
+│       ├── components/FileList.tsx
+│       ├── services/api.ts     # axios 封装
+│       └── styles/global.css
+├── .github/workflows/ci.yml    # CI (go build + npm build)
+├── Makefile                    # make dev / make build
+├── .gitignore
+└── README.md
+```
+
+**快速启动：**
+```bash
+make dev          # 同时启动后端 (:8080) + 前端 (:5173)
+# 或分开：
+make backend
+make frontend
+```
+
+前后端已配好代理，前端请求 `/api/v1/*` 会自动转发到 Go 后端。需要调整功能或加模块随时说。

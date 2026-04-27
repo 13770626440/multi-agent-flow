@@ -20,6 +20,16 @@ from jsonschema import validate, ValidationError as JsonSchemaValidationError
 from app.clients.openmoss_client import openmoss_client
 from app.config import get_settings
 
+# P0-2: 直接导入 loader.py（消除动态导入）
+import importlib.util
+import os
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_loader_path = os.path.join(_backend_dir, 'skills', 'agency-agent', 'loader.py')
+_spec = importlib.util.spec_from_file_location("skill_loader", _loader_path)
+_loader_module = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_loader_module)
+create_skill_loader = _loader_module.create_skill_loader
+
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
@@ -114,7 +124,7 @@ class Decomposer:
     
     def _build_instruction(self, task_def: Dict[str, Any], context: Dict[str, Any]) -> str:
         """
-        构建完整指令（包含 Required Skills + Instruction + Output Format）
+        构建完整指令（包含 Skills 内容 + Instruction + Output Format）
         
         Args:
             task_def: YAML 中的任务定义
@@ -125,27 +135,46 @@ class Decomposer:
         """
         parts = []
         
-        # 1. Required Skills
+        # 1. 加载并注入 Required Skills 的实际内容
         required_skills = task_def.get("required_skills", [])
-        if required_skills:
-            skills_text = "\n".join([f"- {skill}" for skill in required_skills])
-            parts.append(f"## Required Skills\n{skills_text}\n")
+        target_role = task_def.get("target_role", "")
+        
+        if required_skills or target_role:
+            skill_loader = create_skill_loader(
+                skills_dir=settings.SKILLS_DIR,
+                role_skill_map=settings.DEFAULT_ROLE_SKILL_MAP
+            )
+            
+            # 优先使用显式声明的 required_skills，否则根据角色加载
+            if required_skills:
+                loaded_skills = skill_loader.load_skills(required_skills)
+            elif target_role:
+                loaded_skills = skill_loader.load_skills_for_role(target_role)
+            else:
+                loaded_skills = []
+            
+            if loaded_skills:
+                parts.append("## Active Skills\n")
+                for skill in loaded_skills:
+                    parts.append(f"\n### Skill: {skill['name']}\n")
+                    parts.append(skill['content'])
+                logger.info(f"Loaded {len(loaded_skills)} skills for task: {[s['name'] for s in loaded_skills]}")
         
         # 2. Instruction（替换变量）
         instruction_template = task_def.get("execution_context", {}).get("instruction", "")
         instruction = self._render_template(instruction_template, context)
         if instruction:
-            parts.append(f"## Instruction\n{instruction}\n")
+            parts.append(f"\n## Instruction\n{instruction}\n")
         
         # 3. Output Format
         output_format = task_def.get("execution_context", {}).get("output_format", "json")
-        parts.append(f"## Output Format\n{output_format}\n")
+        parts.append(f"\n## Output Format\n{output_format}\n")
         
         # 4. Acceptance Criteria
         acceptance_criteria = task_def.get("acceptance_criteria", [])
         if acceptance_criteria:
             criteria_text = "\n".join([f"- {c}" for c in acceptance_criteria])
-            parts.append(f"## Acceptance Criteria\n{criteria_text}\n")
+            parts.append(f"\n## Acceptance Criteria\n{criteria_text}\n")
         
         return "\n".join(parts)
     

@@ -1,10 +1,1 @@
-﻿docker : Gateway agent failed; falling back to embedded: GatewayClientRequestError: FailoverError: No API key found for
- provider "openai". Auth store: /home/node/.openclaw/agents/main/agent/auth-profiles.json (agentDir: /home/node/.opencl
-aw/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the mai
-n agentDir.
-所在位置 行:1 字符: 164
-+ ... ing]::UTF8; docker exec maf-openclaw-gateway openclaw agent --session ...
-+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (Gateway agent f... main agentDir.:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 
+﻿405 status code (no body)

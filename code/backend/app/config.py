@@ -1,6 +1,10 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Dict, List
+import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -28,10 +32,24 @@ class Settings(BaseSettings):
     OPENMOSS_TOKEN_EXECUTOR: Optional[str] = None
     OPENMOSS_TOKEN_REVIEWER: Optional[str] = None
     OPENMOSS_TOKEN_PATROL: Optional[str] = None
+    OPENMOSS_REGISTRATION_TOKEN: str = "default-registration-token"  # Agent 注册令牌
     
     # 模板配置
     TEMPLATE_DIR: str = "/app/templates"
     TEMPLATE_DEBOUNCE_SECONDS: float = 1.0  # 文件变更防抖动时间（秒）
+    
+    # Skills 配置
+    SKILLS_DIR: str = "/app/skills"  # Skills 目录路径
+    DEFAULT_ROLE_SKILL_MAP: Dict[str, List[str]] = {
+        # 全局默认角色 → Skill 映射
+        # 支持模板级覆盖（后续迭代）
+        "product-manager": ["multi-agent-flow-manager"],
+        "tech-lead": ["multi-agent-flow-manager"],
+        "executor": ["agency-agent"],
+        "reviewer": ["agency-agent"],
+        "planner": ["multi-agent-flow-manager"],
+        "patrol": ["agency-agent"],
+    }
     
     # 任务管理配置
     SYNC_INTERVAL_SECONDS: int = 300  # 状态同步间隔（5 分钟）
@@ -41,6 +59,29 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+    
+    def validate_skills_config(self) -> None:
+        """
+        P2-6: 启动时验证 DEFAULT_ROLE_SKILL_MAP 中的 skills 是否存在
+        """
+        if not hasattr(self, 'SKILLS_DIR') or not hasattr(self, 'DEFAULT_ROLE_SKILL_MAP'):
+            return
+        
+        skills_dir = self.SKILLS_DIR
+        if not os.path.exists(skills_dir):
+            logger.warning(f"Skills directory does not exist: {skills_dir}")
+            return
+        
+        # 检查所有配置的 skill 是否存在
+        all_configured_skills = set()
+        for role, skills in self.DEFAULT_ROLE_SKILL_MAP.items():
+            for skill in skills:
+                all_configured_skills.add(skill)
+                skill_path = os.path.join(skills_dir, skill, "SKILL.md")
+                if not os.path.exists(skill_path):
+                    logger.warning(f"Configured skill '{skill}' for role '{role}' not found at {skill_path}")
+        
+        logger.info(f"Validated {len(all_configured_skills)} configured skills: {sorted(all_configured_skills)}")
 
 
 @lru_cache()
