@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     OPENMOSS_TOKEN_EXECUTOR: Optional[str] = None
     OPENMOSS_TOKEN_REVIEWER: Optional[str] = None
     OPENMOSS_TOKEN_PATROL: Optional[str] = None
-    OPENMOSS_REGISTRATION_TOKEN: str = "default-registration-token"  # Agent 注册令牌
+    OPENMOSS_REGISTRATION_TOKEN: str = "maf-register-token-2026"  # Agent 注册令牌（与 OpenMOSS config.yaml 一致）
     
     # 模板配置
     TEMPLATE_DIR: str = "/app/templates"

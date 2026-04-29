@@ -1,0 +1,18 @@
+template_id: "test-agency-flow"
+version: "1.0.0"
+description: "测试 agency-agent 完整加载流程"
+
+roles:
+  test-executor:
+    model: "qwen3.6-plus"
+    description: "测试执行 Agent"
+
+tasks:
+  - task_id: "test-task-001"
+    name: "测试任务"
+    type: fixed
+    dependencies: []
+    target_role: "test-executor"
+    execution_context:
+      instruction: "这是一个测试任务，用于验证模板加载和 Agent 创建流程"
+      output_format: "text"

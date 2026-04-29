@@ -8,7 +8,9 @@ from app.api.tasks import router as tasks_router
 from app.core.redis_client import redis_client
 from app.core.database import init_db
 from app.core.sync_engine import sync_engine
+from app.core.template_loader import TemplateLoader
 import asyncio
+import os
 
 settings = get_settings()
 
@@ -38,6 +40,23 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Warning: Redis connection error: {e}")
     
+    # 启动 TemplateLoader（监控模板目录）
+    template_loader = TemplateLoader(settings.TEMPLATE_DIR)
+    
+    # 获取当前事件循环并传递给 TemplateLoader
+    try:
+        loop = asyncio.get_running_loop()
+        if template_loader.start(event_loop=loop):
+            print(f"TemplateLoader started, watching {settings.TEMPLATE_DIR}")
+        else:
+            print("Warning: TemplateLoader failed to start")
+    except RuntimeError:
+        # 如果没有运行中的事件循环
+        if template_loader.start():
+            print(f"TemplateLoader started (no event loop), watching {settings.TEMPLATE_DIR}")
+        else:
+            print("Warning: TemplateLoader failed to start")
+    
     # 启动 SyncEngine 后台循环（状态同步引擎）
     sync_task = asyncio.create_task(sync_engine.start_sync_loop())
     print(f"SyncEngine started, interval: {sync_engine.sync_interval}s")
@@ -46,6 +65,13 @@ async def lifespan(app: FastAPI):
     
     # === 关闭阶段 ===
     print("Shutting down...")
+    
+    # 停止 TemplateLoader
+    try:
+        template_loader.stop()
+        print("TemplateLoader stopped")
+    except Exception as e:
+        print(f"Warning: Error stopping TemplateLoader: {e}")
     
     # 取消 SyncEngine 后台任务
     try:
@@ -71,10 +97,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS中间件
+# CORS中间件（ARCH-005 修复：生产环境应限制域名）
+allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

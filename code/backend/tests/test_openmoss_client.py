@@ -74,8 +74,8 @@ class TestOpenMOSSClient:
             assert "sub-tasks" in call_args.args[1]
             assert call_args.kwargs["json"]["task_id"] == "task_001"
             assert call_args.kwargs["json"]["name"] == "Test Task"
-            # 验证使用了 Planner Token
-            assert call_args.kwargs["headers"]["X-Agent-Key"] == "test_planner_key"
+            # 验证使用了 Planner Token (Authorization: Bearer 格式)
+            assert call_args.kwargs["headers"]["Authorization"] == "Bearer test_planner_key"
 
     @pytest.mark.asyncio
     async def test_get_sub_task(self, client):
@@ -109,19 +109,20 @@ class TestOpenMOSSClient:
 
     @pytest.mark.asyncio
     async def test_submit_sub_task(self, client):
-        """测试提交子任务 (Executor)"""
+        """测试提交子任务 (Executor) - submit 不需要 session_id 参数"""
         mock_resp = self._mock_response({"status": "review"})
         
         with patch("httpx.AsyncClient.request", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = mock_resp
             
-            await client.submit_sub_task("sub_001", "session_123")
+            await client.submit_sub_task("sub_001")
             
             call_args = mock_req.call_args
             assert "submit" in call_args.args[1]
-            assert call_args.kwargs["json"]["session_id"] == "session_123"
-            # 验证使用了 Executor Token
-            assert call_args.kwargs["headers"]["X-Agent-Key"] == "test_executor_key"
+            # submit 不传 session_id，json payload 应为空
+            assert call_args.kwargs["json"] == {}
+            # 验证使用了 Executor Token (Authorization: Bearer 格式)
+            assert call_args.kwargs["headers"]["Authorization"] == "Bearer test_executor_key"
 
     @pytest.mark.asyncio
     async def test_block_sub_task(self, client):
@@ -135,8 +136,8 @@ class TestOpenMOSSClient:
             
             call_args = mock_req.call_args
             assert "block" in call_args.args[1]
-            # 验证使用了 Patrol Token
-            assert call_args.kwargs["headers"]["X-Agent-Key"] == "test_patrol_key"
+            # 验证使用了 Patrol Token (Authorization: Bearer 格式)
+            assert call_args.kwargs["headers"]["Authorization"] == "Bearer test_patrol_key"
 
     @pytest.mark.asyncio
     async def test_retry_on_network_error(self, client):
@@ -167,3 +168,52 @@ class TestOpenMOSSClient:
             
             # 验证没有重试，只调用了一次
             assert mock_req.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_list_agents_returns_list(self, client):
+        """测试 list_agents 返回 list 格式"""
+        mock_data = [{"id": "1", "name": "agent1"}, {"id": "2", "name": "agent2"}]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = mock_data
+        mock_resp.raise_for_status = MagicMock()
+        
+        with patch("httpx.AsyncClient.request", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_resp
+            
+            result = await client.list_agents()
+            
+            assert len(result) == 2
+            assert result[0]["name"] == "agent1"
+
+    @pytest.mark.asyncio
+    async def test_list_agents_returns_items(self, client):
+        """测试 list_agents 返回 items 格式"""
+        mock_data = {"items": [{"id": "1"}, {"id": "2"}]}
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = mock_data
+        mock_resp.raise_for_status = MagicMock()
+        
+        with patch("httpx.AsyncClient.request", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_resp
+            
+            result = await client.list_agents()
+            
+            assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_list_agents_returns_agents(self, client):
+        """测试 list_agents 返回 agents 格式"""
+        mock_data = {"agents": [{"id": "1"}]}
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = mock_data
+        mock_resp.raise_for_status = MagicMock()
+        
+        with patch("httpx.AsyncClient.request", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_resp
+            
+            result = await client.list_agents()
+            
+            assert len(result) == 1

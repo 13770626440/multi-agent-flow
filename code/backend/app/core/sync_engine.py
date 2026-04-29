@@ -119,7 +119,7 @@ class SyncEngine:
             # 不抛出异常，继续处理下一个任务
     
     async def _unlock_dependent_tasks(self, session, completed_task: SubTaskRecord):
-        """解锁依赖当前任务的后续任务"""
+        """解锁依赖当前任务的后续任务（ARCH-003 修复：统一使用 task_id）"""
         # 1. 获取父任务 DAG 快照
         result = await session.execute(
             select(TaskInstance).where(TaskInstance.id == completed_task.instance_id)
@@ -135,58 +135,57 @@ class SyncEngine:
             logger.warning(f"No DAG snapshot for task {completed_task.instance_id}")
             return
         
-        # 2. 找出依赖当前任务的后续任务
-        dependent_tasks = dag_snapshot.get("tasks", [])
+        # ARCH-003 修复：构建 task_id 到 SubTaskRecord 的映射
+        all_sub_tasks_result = await session.execute(
+            select(SubTaskRecord).where(SubTaskRecord.instance_id == completed_task.instance_id)
+        )
+        all_sub_tasks = all_sub_tasks_result.scalars().all()
+        
+        # 建立 task_id (UUID) -> SubTaskRecord 映射
+        # 注意：SubTaskRecord.id 是 UUID，但 dependencies 存储的也是 UUID
+        # 所以这里直接使用 UUID 比较即可
+        task_id_to_record = {task.id: task for task in all_sub_tasks}
+        
+        # 2. 找出依赖当前完成任务的后续任务
         unlocked_count = 0
         
-        for task_def in dependent_tasks:
-            task_id = task_def.get("id")
-            dependencies = task_def.get("dependencies", [])
+        for task_record in all_sub_tasks:
+            # 跳过已完成或当前任务
+            if task_record.status in [SubTaskStatus.DONE, SubTaskStatus.FAILED]:
+                continue
+            if task_record.id == completed_task.id:
+                continue
             
             # 检查是否依赖当前完成的任务
-            if completed_task.id in dependencies or task_id == completed_task.id:
+            dependencies = task_record.dependencies or []
+            if completed_task.id not in dependencies:
                 continue
             
             # 检查所有依赖是否都已完成
-            if completed_task.id in dependencies:
-                # 查询该子任务记录
-                dep_result = await session.execute(
-                    select(SubTaskRecord).where(
-                        SubTaskRecord.instance_id == completed_task.instance_id,
-                        SubTaskRecord.id == task_id
+            all_deps_done = await self._check_all_dependencies_done(
+                session, completed_task.instance_id, task_record
+            )
+            
+            if all_deps_done and task_record.status == SubTaskStatus.PENDING:
+                # 解锁任务
+                task_record.status = SubTaskStatus.ASSIGNED
+                unlocked_count += 1
+                logger.info(f"Unlocked dependent task {task_record.id}")
+                
+                # 调用 Dispatcher 派发任务
+                try:
+                    dispatch_result = await dispatcher.dispatch_task(
+                        sub_task_id=task_record.id,
+                        openmoss_id=task_record.openmoss_id or "",
+                        role=task_record.role,
+                        instruction=task_record.instruction,
+                        conversation_id=task_record.conversation_id
                     )
-                )
-                dep_task = dep_result.scalar_one_or_none()
-                
-                if not dep_task:
-                    logger.warning(f"Dependent task {task_id} not found in database")
-                    continue
-                
-                # 检查所有依赖是否都已完成
-                all_deps_done = await self._check_all_dependencies_done(
-                    session, completed_task.instance_id, dep_task
-                )
-                
-                if all_deps_done and dep_task.status == SubTaskStatus.PENDING:
-                    # 解锁任务
-                    dep_task.status = SubTaskStatus.ASSIGNED
-                    unlocked_count += 1
-                    logger.info(f"Unlocked dependent task {dep_task.id}")
-                    
-                    # 调用 Dispatcher 派发任务
-                    try:
-                        dispatch_result = await dispatcher.dispatch_task(
-                            sub_task_id=dep_task.id,
-                            openmoss_id=dep_task.openmoss_id or "",
-                            role=dep_task.role,
-                            instruction=dep_task.instruction,
-                            conversation_id=dep_task.conversation_id
-                        )
-                        dep_task.dispatch_status = dispatch_result["status"]
-                        logger.info(f"Dispatched unlocked task {dep_task.id}: {dispatch_result['status']}")
-                    except Exception as e:
-                        logger.error(f"Failed to dispatch unlocked task {dep_task.id}: {e}")
-                        dep_task.dispatch_status = "failed"
+                    task_record.dispatch_status = dispatch_result["status"]
+                    logger.info(f"Dispatched unlocked task {task_record.id}: {dispatch_result['status']}")
+                except Exception as e:
+                    logger.error(f"Failed to dispatch unlocked task {task_record.id}: {e}")
+                    task_record.dispatch_status = "failed"
         
         if unlocked_count > 0:
             logger.info(f"Unlocked {unlocked_count} dependent tasks for {completed_task.instance_id}")

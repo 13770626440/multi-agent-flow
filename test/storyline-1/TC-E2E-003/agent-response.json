@@ -1,0 +1,7 @@
+{
+  "command": "docker exec maf-openclaw-gateway openclaw agent --session-id test-storyline-1 --message 请使用 simple-dev-flow 模板创建一个任务，项目名称为'用户管理系统'，技术栈为'FastAPI + Vue3'",
+  "stdout": "✅ **任务创建成功！**\n\n- **任务 ID**: `732fea21-d329-41c1-ac07-82b92824be42`\n- **名称**: 用户管理系统\n- **技术栈**: FastAPI + Vue3\n- **模板**: simple-dev-flow (v1.0.1)\n- **状态**: pending（待开始）\n- **创建时间**: 2026-04-28 08:45:14\n\n### 即将执行的节点流程\n\n```\n[1] 需求分析 (product-manager)\n         ↓\n[2] 开发任务分解 (tech-lead)\n         ↓\n[3] 代码审查 (reviewer)\n         ↓\n[4] 部署上线 (devops)\n```\n\n是否现在开始执行第一个节点 **需求分析**？\n",
+  "stderr": "",
+  "returncode": 0,
+  "timestamp": "2026-04-28T16:45:19.367469"
+}

@@ -14,15 +14,50 @@ from app.clients.openclaw_client import openclaw_client
 from app.clients.openmoss_client import openmoss_client
 from app.config import get_settings
 
-# P0-2: 直接导入 loader.py（消除动态导入）
+# ARCH-006 修复：安全的 Skill Loader 导入
 import importlib.util
+from pathlib import Path
 import os
-_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_loader_path = os.path.join(_backend_dir, 'skills', 'agency-agent', 'loader.py')
-_spec = importlib.util.spec_from_file_location("skill_loader", _loader_path)
-_loader_module = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_loader_module)
-create_skill_loader = _loader_module.create_skill_loader
+
+def _safe_load_skill_loader():
+    """
+    安全加载 Skill Loader（ARCH-006 修复）
+    验证路径在 SKILLS_DIR 范围内，防止路径遍历攻击
+    """
+    from app.config import get_settings
+    settings = get_settings()
+    skills_dir = Path(settings.SKILLS_DIR).resolve()
+    
+    # 尝试两种可能的路径
+    _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidate_paths = [
+        os.path.join(_backend_dir, 'skills', 'agency-agent', 'loader.py'),  # 本地开发
+        os.path.join(os.path.dirname(_backend_dir), 'skills', 'agency-agent', 'loader.py')  # 容器内
+    ]
+    
+    for _skills_path in candidate_paths:
+        if os.path.exists(_skills_path):
+            # ARCH-006 修复：验证路径在 skills_dir 范围内
+            resolved_path = Path(_skills_path).resolve()
+            try:
+                resolved_path.relative_to(skills_dir)
+            except ValueError:
+                raise SecurityError(f"Skill loader path {_skills_path} is outside SKILLS_DIR {skills_dir}")
+            
+            _loader_path = _skills_path
+            break
+    else:
+        raise FileNotFoundError(f"Skill loader not found in expected paths")
+    
+    _spec = importlib.util.spec_from_file_location("skill_loader", _loader_path)
+    _loader_module = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_loader_module)
+    return _loader_module.create_skill_loader
+
+class SecurityError(Exception):
+    pass
+
+create_skill_loader = _safe_load_skill_loader()
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -46,14 +81,36 @@ class AgentProvisioner:
         """
         agent_name = f"{role_name}-agent"
         
-        # 1. 检查 Agent 是否已注册
-        if await self.check_agent_exists(role_name):
-            logger.info(f"Agent for role '{role_name}' already exists.")
-            return True
+        # 1. 检查 OpenClaw 中是否已存在该 Agent
+        if await self.check_agent_exists_in_openclaw(agent_name):
+            logger.info(f"Agent '{agent_name}' already exists in OpenClaw, sending onboarding package.")
+            # Agent 已存在，但仍需发送入职包（可能更新了 prompt/skills）
+            try:
+                await self.send_onboarding_package(agent_name, role_name)
+                logger.info(f"Onboarding package sent to {agent_name}.")
+            except Exception as e:
+                logger.error(f"Failed to send onboarding package to {agent_name}: {e}")
+                return False
+            
+            # 配置 Cron（如果已存在可能不需要，但确保配置正确）
+            try:
+                await self.configure_cron(agent_name, role_name)
+                logger.info(f"Cron configured for {agent_name}.")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to configure cron for {agent_name}: {e}")
+                return False
         
         # 2. 创建 Agent
         try:
-            await self.create_agent(agent_name, model)
+            result = await self.create_agent(agent_name, model)
+            if result.get("status") == "error":
+                # 如果是因为已存在，继续后续步骤
+                if "already exists" in result.get("error", ""):
+                    logger.info(f"Agent '{agent_name}' already exists, proceeding with onboarding.")
+                else:
+                    logger.error(f"Failed to create agent {agent_name}: {result.get('error')}")
+                    return False
         except Exception as e:
             logger.error(f"Failed to create agent {agent_name}: {e}")
             return False
@@ -75,22 +132,19 @@ class AgentProvisioner:
             logger.error(f"Failed to configure cron for {agent_name}: {e}")
             return False
 
-    async def check_agent_exists(self, role_name: str) -> bool:
-        """检查 OpenMOSS 中是否已注册该角色的 Agent。"""
+    async def check_agent_exists_in_openclaw(self, agent_name: str) -> bool:
+        """检查 OpenClaw 中是否已存在该 Agent。"""
         try:
-            agents = await openmoss_client.list_agents()
-            for agent in agents:
-                if agent.get("role") == role_name and agent.get("status") == "active":
-                    return True
-            return False
+            agents = await openclaw_client.list_agents()
+            return agent_name in agents
         except Exception as e:
-            logger.warning(f"Error checking agent existence: {e}")
+            logger.warning(f"Error checking agent existence in OpenClaw: {e}")
             return False
 
-    async def create_agent(self, agent_name: str, model: str) -> None:
+    async def create_agent(self, agent_name: str, model: str) -> Dict[str, Any]:
         """调用 OpenClaw API 创建 Agent。"""
         workspace = f"/workspace/{agent_name}"
-        await openclaw_client.create_agent(
+        return await openclaw_client.create_agent(
             name=agent_name,
             model=model,
             workspace=workspace
@@ -184,48 +238,69 @@ class AgentProvisioner:
         Returns:
             完整的入职消息
         """
-        return f"""
-# 欢迎入职！
+        return f"""# 欢迎入职！
 
-你是 **{role_name}** 角色。请执行以下步骤完成配置：
+你是 **{role_name}** 角色。请立即执行以下操作：
 
-## 1. 更新提示词
-请将以下内容保存为你的核心指令 (AGENTS.md)：
+## 第一步：保存核心指令
+
+**你必须立即将以下内容写入 `/workspace/{role_name}-agent/AGENTS.md` 文件：**
+
+```markdown
+# {role_name}
 
 {prompt}
 
 {skills_section}
 
-## 2. 下载工具
-请执行以下命令下载任务 CLI 工具：
-```bash
-# 这里应该是具体的下载命令或内容
-{cli_tool}
-```
-
-## 3. 自动注册
-请使用以下注册令牌调用 OpenMOSS API 注册自己：
-Token: `{reg_token}`
-
-## 4. ⚠️ Workspace 使用规范 (重要)
+## ⚠️ Workspace 使用规范
 所有任务产出物必须保存在共享工作区 `/workspace` 下，并严格按照 **Task ID** 进行隔离：
 - 收到任务后，**必须**进入 `/workspace/{{task_id}}/` 目录进行操作。
 - 严禁在 `/workspace` 根目录或其他非 Task ID 目录下创建文件。
 - 读取前置任务产出物时，也请前往对应的 `/workspace/{{task_id}}/` 目录。
 
-完成注册后，你将获得 API Key 并开始工作。
+## 📚 Skills 路径说明
+Skills 已预装在 `/app/skills/` 目录下：
+- `/app/skills/agency-agent/SKILL.md` - 基座 Skill（任务解析和执行）
+- `/app/skills/multi-agent-flow-manager/SKILL.md` - 任务管理 Skill
+
+加载 Skill 时，请使用绝对路径 `/app/skills/{{skill_name}}/SKILL.md`
+```
+
+**请立即使用 write 工具将上述内容保存到 AGENTS.md！**
+
+## 第二步：注册到 OpenMOSS
+
+使用以下注册令牌调用 OpenMOSS API 注册自己：
+Token: `{reg_token}`
+
+注册 API: `POST http://maf-openmoss:6565/api/agents/register`
+Headers: `X-Registration-Token: {reg_token}`
+Body: `{{"name": "{role_name}-agent", "role": "{role_name}", "description": "{role_name} agent for multi-agent-flow"}}`
+
+注册完成后，你将获得 API Key 并开始工作。
 """
 
     async def configure_cron(self, agent_name: str, role_name: str) -> None:
         """
         为 Agent 配置 Cron 定时唤醒任务。
         """
+        cron_id = f"{role_name}-poll"
+        
+        # 检查 Cron 是否已存在
+        try:
+            existing_crons = await openclaw_client.list_cron_jobs()
+            if existing_crons and any(c.get('name') == cron_id for c in existing_crons):
+                logger.info(f"Cron job {cron_id} already exists, skipping.")
+                return
+        except Exception as e:
+            logger.warning(f"Failed to check existing cron jobs: {e}")
+            # 继续执行，让 add_cron_job 处理重复情况
+        
         # 获取角色的 Cron 配置，如果没有则使用默认
         cron_config = DEFAULT_CRON_CONFIGS.get(role_name, {})
         schedule = cron_config.get("schedule", "*/15 * * * *")
         message = cron_config.get("message", "Wake up and check tasks.")
-
-        cron_id = f"{role_name}-poll"
         
         await openclaw_client.add_cron_job(
             cron_id=cron_id,

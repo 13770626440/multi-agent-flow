@@ -11,7 +11,7 @@ import json
 import asyncio
 import logging
 from typing import Dict, Optional
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
 from app.schemas.template import TemplateSchema
 from app.core.redis_client import redis_client
@@ -44,8 +44,14 @@ class TemplateFileHandler(FileSystemEventHandler):
         
         self._last_modified[file_path] = current_time
         
-        # 延迟处理，确保文件写入完成
-        time.sleep(0.5)
+        # ARCH-012 修复：使用线程池延迟处理，避免阻塞 Watchdog 线程
+        import concurrent.futures
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        executor.submit(self._delayed_load, file_path)
+    
+    def _delayed_load(self, file_path: str):
+        """延迟加载模板（ARCH-012 修复）"""
+        time.sleep(0.5)  # 在线程中 sleep，不阻塞 Watchdog
         self.loader.load_template(file_path)
     
     def on_created(self, event):
@@ -59,12 +65,22 @@ class TemplateLoader:
         settings = get_settings()
         self.template_dir = template_dir or settings.TEMPLATE_DIR
         self.debounce_seconds = settings.TEMPLATE_DEBOUNCE_SECONDS  # 从配置读取防抖动时间
-        self.observer = Observer()
+        self.observer = PollingObserver(timeout=1.0)  # 轮询间隔 1 秒，适配 Docker 9p 文件系统
         self.handler = TemplateFileHandler(self, self.debounce_seconds)
         self._templates: Dict[str, TemplateSchema] = {}  # 本地缓存
+        self._event_loop: Optional[asyncio.AbstractEventLoop] = None  # 保存主事件循环引用
     
-    def start(self) -> bool:
-        """启动加载器"""
+    def start(self, event_loop: Optional[asyncio.AbstractEventLoop] = None) -> bool:
+        """启动加载器
+        
+        Args:
+            event_loop: 主事件循环引用（用于在 Watchdog 线程中调度异步任务）
+        """
+        # 保存主事件循环引用
+        if event_loop:
+            self._event_loop = event_loop
+            logger.info("Main event loop reference saved")
+        
         # 确保 Redis 连接
         if not redis_client.is_connected():
             if not redis_client.connect():
@@ -120,12 +136,19 @@ class TemplateLoader:
                 logger.warning(f"YAML file is empty: {file_path}")
                 return False
             
+            # 设置时间戳（ARCH-S2-001 修复：保持 datetime 类型，让 Pydantic 自动处理序列化）
+            from datetime import datetime
+            now = datetime.now()
+            data['created_at'] = now
+            data['updated_at'] = now
+            
             # Schema 校验（包含 DAG 循环检测）
             template = TemplateSchema(**data)
             
             # 存入 Redis
+            # ARCH-S2-001 修复：使用 mode='json' 确保 datetime 等特殊类型被序列化为 JSON 兼容格式
             redis_key = f"template:{template.template_id}"
-            template_data = template.model_dump()
+            template_data = template.model_dump(mode='json')
             
             if redis_client.set(redis_key, template_data):
                 self._templates[template.template_id] = template
@@ -152,25 +175,40 @@ class TemplateLoader:
     def _trigger_agent_provisioning(self, template_data: Dict):
         """
         触发 Agent 动态供给。
-        由于 Watchdog 运行在独立线程，这里需要安全地调度异步任务。
+        使用 run_coroutine_threadsafe() 安全地在 Watchdog 线程中调度异步任务到主事件循环。
         """
         roles = template_data.get("roles", {})
         if not roles:
+            logger.info("No roles defined in template, skipping agent provisioning")
+            return
+
+        if not self._event_loop:
+            logger.warning("No event loop reference available, cannot trigger agent provisioning")
             return
 
         try:
-            # 尝试获取当前事件循环
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                for role_name, config in roles.items():
-                    model = config.get("model", "qwen3.6-plus")
-                    asyncio.ensure_future(agent_provisioner.ensure_role_exists(role_name, model))
-            else:
-                # 如果没有运行中的循环（不太可能发生在 Watchdog 中，但防御性编程）
-                pass 
-        except RuntimeError:
-            # 没有事件循环
-            logger.warning("No running event loop to trigger agent provisioning.")
+            for role_name, config in roles.items():
+                model = config.get("model", "qwen3.6-plus")
+                logger.info(f"Scheduling agent provisioning for role: {role_name} (model: {model})")
+                
+                # 使用 run_coroutine_threadsafe 安全地调度到主事件循环
+                future = asyncio.run_coroutine_threadsafe(
+                    agent_provisioner.ensure_role_exists(role_name, model),
+                    self._event_loop
+                )
+                
+                # 添加回调以记录结果
+                def _on_done(f, role=role_name):
+                    try:
+                        result = f.result()
+                        logger.info(f"Agent provisioning completed for role '{role}': {result}")
+                    except Exception as e:
+                        logger.error(f"Agent provisioning failed for role '{role}': {e}")
+                
+                future.add_done_callback(_on_done)
+                
+        except Exception as e:
+            logger.error(f"Failed to schedule agent provisioning: {e}")
     
     def get_template(self, template_id: str) -> Optional[TemplateSchema]:
         """获取模板"""

@@ -11,6 +11,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 from app.config import get_settings
 from app.core.token_manager import token_manager
+from app.clients.openmoss_auth import OpenMOSSAuth
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +26,8 @@ class OpenMOSSClient:
         self.timeout = 10.0
     
     def _get_headers(self, role: str) -> Dict[str, str]:
-        """获取请求头（OpenMOSS 使用 X-Agent-Key）"""
-        token = token_manager.get_token(role)
-        return {"X-Agent-Key": token}
+        """获取请求头（委托给 OpenMOSSAuth 工具类）"""
+        return OpenMOSSAuth.get_headers(role)
 
     async def create_task(
         self,
@@ -62,12 +62,20 @@ class OpenMOSSClient:
             url: 请求 URL
             role: Agent 角色 (用于获取 Token)
             **kwargs: 其他请求参数 (json, params 等)
+        
+        Raises:
+            httpx.HTTPStatusError: 401/403 认证错误，不重试
+            httpx.ConnectError / httpx.TimeoutException: 网络错误，触发重试
         """
         headers = self._get_headers(role)
         async with httpx.AsyncClient() as client:
             response = await client.request(
                 method, url, headers=headers, timeout=self.timeout, **kwargs
             )
+            # 401/403 认证错误不应重试
+            if response.status_code in (401, 403):
+                logger.error(f"OpenMOSS auth failed ({response.status_code})")
+                response.raise_for_status()
             response.raise_for_status()
             return response.json()
 
@@ -143,21 +151,35 @@ class OpenMOSSClient:
         return await self._request("POST", url, agent_role, json=payload)
 
     # --- 快捷方法 ---
+    # OpenMOSS 子任务状态机：
+    # pending → assigned（创建时设置 assigned_agent 或 planner reassign）
+    # assigned/rework → in_progress（executor start）
+    # in_progress → review（executor submit）
+    # review → done（reviewer complete）
+    # review → rework（reviewer rework，返工后回 in_progress）
+    # 任意非终态 → blocked（patrol block）
 
     async def start_sub_task(self, sub_task_id: str, session_id: str) -> Dict[str, Any]:
-        """开始执行子任务 (Executor 调用)"""
+        """开始执行子任务 (Executor 调用): assigned/rework → in_progress
+        
+        前置条件：子任务状态必须为 assigned 或 rework
+        """
         return await self.update_sub_task_status(sub_task_id, "start", "executor", session_id)
 
-    async def submit_sub_task(self, sub_task_id: str, session_id: str) -> Dict[str, Any]:
-        """提交子任务成果 (Executor 调用)"""
-        return await self.update_sub_task_status(sub_task_id, "submit", "executor", session_id)
+    async def submit_sub_task(self, sub_task_id: str) -> Dict[str, Any]:
+        """提交子任务成果 (Executor 调用): in_progress → review
+        
+        前置条件：子任务状态必须为 in_progress（需先调用 start_sub_task）
+        注意：submit API 不需要 session_id 参数
+        """
+        return await self.update_sub_task_status(sub_task_id, "submit", "executor")
     
     async def complete_sub_task(self, sub_task_id: str) -> Dict[str, Any]:
-        """审查通过子任务 (Reviewer 调用)"""
+        """审查通过子任务 (Reviewer 调用): review → done"""
         return await self.update_sub_task_status(sub_task_id, "complete", "reviewer")
     
     async def rework_sub_task(self, sub_task_id: str) -> Dict[str, Any]:
-        """驳回子任务返工 (Reviewer 调用)"""
+        """驳回子任务返工 (Reviewer 调用): review → rework"""
         return await self.update_sub_task_status(sub_task_id, "rework", "reviewer")
 
     async def block_sub_task(self, sub_task_id: str) -> Dict[str, Any]:
@@ -172,21 +194,45 @@ class OpenMOSSClient:
         对应 API: GET /api/agents
         """
         url = f"{self.base_url}/api/agents"
-        return await self._request("GET", url, "planner")
+        try:
+            result = await self._request("GET", url, "planner")
+            
+            # 兼容不同的返回格式
+            if isinstance(result, list):
+                return result
+            return result.get("items", result.get("agents", []))
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (401, 403):
+                logger.error(f"OpenMOSS auth failed: {e.response.status_code}")
+                raise
+            logger.warning(f"Failed to list agents: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error listing agents: {e}")
+            return []
 
     async def get_prompt(self, role: str) -> str:
         """
         获取指定角色的提示词
-        对应 API: GET /api/prompts/{role}
+        对应 API: GET /api/admin/prompts/onboarding/{role}
+        
+        注意：此接口需要管理员认证，暂时返回空字符串
+        TODO: 配置管理员 token 或提供默认 prompt
         """
-        url = f"{self.base_url}/api/prompts/{role}"
-        # 提示词通常是文本，这里假设返回 JSON 包含 content 字段，或者直接返回文本
-        try:
-            result = await self._request("GET", url, "planner")
-            return result.get("content", "")
-        except Exception:
-            # 如果返回的是纯文本
-            return ""
+        # 暂时返回默认 prompt，因为 /api/admin/prompts/onboarding/{role} 需要管理员认证
+        logger.warning(f"Prompt API requires admin auth, returning default prompt for role: {role}")
+        return f"""你是 {role} 角色。请按照任务指令执行任务。
+
+## 职责
+- 接收并理解任务指令
+- 按照要求执行任务
+- 提交执行结果
+
+## 工作规范
+1. 收到任务后，仔细阅读指令
+2. 按要求完成任务
+3. 将结果输出到指定格式
+"""
 
     async def get_tool_cli(self) -> str:
         """
@@ -194,22 +240,46 @@ class OpenMOSSClient:
         对应 API: GET /api/tools/cli
         """
         url = f"{self.base_url}/api/tools/cli"
-        # 这里可能返回文件内容或下载链接，假设返回内容
         try:
             result = await self._request("GET", url, "planner")
             return result.get("content", "")
-        except Exception:
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to get CLI tool: {e.response.status_code}")
+            return ""
+        except httpx.ConnectError as e:
+            logger.error(f"Connection failed getting CLI tool: {e}")
+            return ""
+        except Exception as e:
+            logger.error(f"Unexpected error getting CLI tool: {e}")
             return ""
 
-    async def get_skill_md(self) -> str:
+    async def get_skill_md(self, role: str) -> str:
         """
         获取 Skill 文档 (Agent 自动注册后下载)
         对应 API: GET /api/agents/me/skill
-        注意：这个接口通常需要 Agent 的 Key，但在入职阶段，Backend 可能需要用 Admin 权限获取通用模板
-        这里暂时使用 Planner 权限尝试获取，或者返回一个占位符
+        
+        Args:
+            role: Agent 角色
+        
+        Returns:
+            Skill 文档内容
         """
-        # 暂时返回空，实际可能需要更复杂的逻辑或特定 Token
-        return ""
+        url = f"{self.base_url}/api/agents/me/skill"
+        try:
+            headers = OpenMOSSAuth.get_headers(role)
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers, timeout=self.timeout)
+                if response.status_code == 404:
+                    logger.warning(f"Skill not found for role: {role}")
+                    return ""
+                response.raise_for_status()
+                return response.text
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to get skill for role {role}: {e.response.status_code}")
+            return ""
+        except Exception as e:
+            logger.error(f"Unexpected error getting skill for role {role}: {e}")
+            return ""
 
 
 # 全局单例

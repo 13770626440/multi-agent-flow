@@ -33,7 +33,7 @@
 
 | 项目 | 内容 |
 |:---|:---|
-| **文件路径** | `docs/template/template_editor/e2e-smoke-test.yaml` |
+| **文件路径** | `template_editor/e2e-smoke-test.yaml` |
 | **验证结果** | ⬜ 通过 / ⬜ 失败 |
 | **备注** | |
 
@@ -41,7 +41,7 @@
 
 | 项目 | 内容 |
 |:---|:---|
-| **操作命令** | `Copy-Item docs/template/template_editor/e2e-smoke-test.yaml docs/template/` |
+| **操作命令** | `Copy-Item template_editor/e2e-smoke-test.yaml template/` |
 | **Backend 日志** | ``` 粘贴日志 ``` |
 | **验证结果** | ⬜ 通过 / ⬜ 失败 |
 | **备注** | |

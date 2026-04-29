@@ -1,0 +1,7 @@
+{
+  "command": "docker exec maf-openclaw-gateway openclaw agent --session-id test-storyline-1 --message 请查询刚才创建的任务详情，包括输入参数和节点信息",
+  "stdout": "📋 **任务详情**\n\n### 基本信息\n\n| 字段 | 值 |\n|---|---|\n| **任务 ID** | `732fea21-d329-41c1-ac07-82b92824be42` |\n| **名称** | 用户管理系统 |\n| **描述** | 使用 FastAPI + Vue3 开发用户管理系统 |\n| **模板** | simple-dev-flow (v1.0.1) |\n| **状态** | ⏳ pending（待开始） |\n| **创建时间** | 2026-04-28 08:45:14 |\n\n### 输入参数\n\n| 参数 | 值 |\n|---|---|\n| `project_name` | 用户管理系统 |\n| `tech_stack` | FastAPI + Vue3 |\n\n### 节点信息\n\n| # | 节点 ID | 名称 | 类型 | 依赖 | 目标角色 | 输出路径 |\n|---|---|---|---|---|---|---|\n| 1 | `req-analysis` | 需求分析 | fixed | 无 | product-manager | `/workspace/{task_id}/req-analysis/prd.md` |\n| 2 | `dev-breakdown` | 开发任务分解 | dynamic | req-analysis | tech-lead | `/workspace/{task_id}/dev-breakdown/sub-tasks.json` |\n| 3 | `code-review` | 代码审查 | review | dev-breakdown | reviewer | `/workspace/{task_id}/code-review/review-report.md` |\n| 4 | `deploy` | 部署上线 | fixed | code-review | devops | `/workspace/{task_id}/deploy/deploy-log.md` |\n\n### 执行流程\n\n```\n[1] 需求分析 ──→ [2] 开发任务分解 ──→ [3] 代码审查 ──→ [4] 部署上线\n```\n\n全部为串行依赖，当前状态为 pending，尚未开始执行。需要开始执行第一个节点吗？\n",
+  "stderr": "",
+  "returncode": 0,
+  "timestamp": "2026-04-28T16:45:39.325990"
+}

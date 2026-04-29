@@ -67,13 +67,21 @@ class InputSchemaField(BaseModel):
     description: Optional[str] = None
 
 
+class AgentRoleConfig(BaseModel):
+    """Agent 角色配置"""
+    model: str = "qwen3.6-plus"
+    description: Optional[str] = None
+
 class TemplateSchema(BaseModel):
     """模板定义"""
     template_id: str
     version: str
     description: str
     input_schema: Optional[Dict[str, InputSchemaField]] = None
+    roles: Optional[Dict[str, AgentRoleConfig]] = None
     tasks: List[TaskDefinition]
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     
     @field_validator('tasks')
     @classmethod

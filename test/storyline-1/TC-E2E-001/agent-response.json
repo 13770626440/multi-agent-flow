@@ -1,0 +1,7 @@
+{
+  "command": "docker exec maf-openclaw-gateway openclaw agent --session-id test-storyline-1 --message 请查询 simple-dev-flow 模板的详细信息",
+  "stdout": "已在前面两轮回复过完整信息，这里简要汇总：\n\n**simple-dev-flow** (v1.0.1) — 4 节点串行流程：\n\n> 需求分析 → 开发任务分解 → 代码审查 → 部署上线\n\n需输入 `project_name`（必填），`tech_stack`（可选，默认 FastAPI + Vue3 + PostgreSQL）。\n\n需要我帮你基于此模板创建任务吗？\n",
+  "stderr": "",
+  "returncode": 0,
+  "timestamp": "2026-04-28T16:44:54.315549"
+}

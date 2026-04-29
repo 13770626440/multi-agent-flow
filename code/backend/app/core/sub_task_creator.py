@@ -11,15 +11,46 @@ import httpx
 from app.clients.openmoss_client import openmoss_client
 from app.config import get_settings
 
-# P0-2: 直接导入 loader.py（消除动态导入）
+# ARCH-006 修复：安全的 Skill Loader 导入
 import importlib.util
+from pathlib import Path
 import os
-_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_loader_path = os.path.join(_backend_dir, 'skills', 'agency-agent', 'loader.py')
-_spec = importlib.util.spec_from_file_location("skill_loader", _loader_path)
-_loader_module = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_loader_module)
-create_skill_loader = _loader_module.create_skill_loader
+
+def _safe_load_skill_loader():
+    """安全加载 Skill Loader（ARCH-006 修复）"""
+    from app.config import get_settings
+    settings = get_settings()
+    skills_dir = Path(settings.SKILLS_DIR).resolve()
+    
+    _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidate_paths = [
+        os.path.join(_backend_dir, 'skills', 'agency-agent', 'loader.py'),
+        os.path.join(os.path.dirname(_backend_dir), 'skills', 'agency-agent', 'loader.py')
+    ]
+    
+    for _skills_path in candidate_paths:
+        if os.path.exists(_skills_path):
+            # 验证路径在 skills_dir 范围内
+            resolved_path = Path(_skills_path).resolve()
+            try:
+                resolved_path.relative_to(skills_dir)
+            except ValueError:
+                raise SecurityError(f"Skill loader path {_skills_path} is outside SKILLS_DIR {skills_dir}")
+            
+            _loader_path = _skills_path
+            break
+    else:
+        raise FileNotFoundError(f"Skill loader not found")
+    
+    _spec = importlib.util.spec_from_file_location("skill_loader", _loader_path)
+    _loader_module = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_loader_module)
+    return _loader_module.create_skill_loader
+
+class SecurityError(Exception):
+    pass
+
+create_skill_loader = _safe_load_skill_loader()
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

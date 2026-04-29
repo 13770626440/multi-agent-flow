@@ -1,0 +1,7 @@
+{
+  "command": "docker exec maf-openclaw-gateway openclaw agent --session-id test-storyline-1 --message 请列出 simple-dev-flow 模板的所有节点，包括节点名称、类型和依赖关系",
+  "stdout": "**simple-dev-flow 模板节点列表：**\n\n| # | 节点 ID | 节点名称 | 类型 | 依赖 | 负责角色 |\n|---|---|---|---|---|---|\n| 1 | `req-analysis` | 需求分析 | fixed | 无 | product-manager |\n| 2 | `dev-breakdown` | 开发任务分解 | dynamic | req-analysis | tech-lead |\n| 3 | `code-review` | 代码审查 | review | dev-breakdown | reviewer |\n| 4 | `deploy` | 部署上线 | fixed | code-review | devops |\n\n流程为**全串行**：`1 → 2 → 3 → 4`，每个节点依赖前一个节点完成。\n",
+  "stderr": "",
+  "returncode": 0,
+  "timestamp": "2026-04-28T16:45:05.340588"
+}

@@ -1,0 +1,18 @@
+﻿template_id: "e2e-smoke-test"
+version: "1.0.0"
+description: "端到端冒烟测试模板"
+
+roles:
+  smoke-test-executor:
+    model: "qwen3.6-plus"
+    description: "冒烟测试执行器"
+
+tasks:
+  - task_id: "smoke-test-task"
+    name: "冒烟测试任务"
+    type: fixed
+    dependencies: []
+    target_role: "smoke-test-executor"
+    execution_context:
+      instruction: "执行冒烟测试"
+      output_format: "text"
