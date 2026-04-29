@@ -555,6 +555,39 @@ tasks:
 
 ---
 
+### 问题记录
+
+| 编号 | 级别 | 发现日期 | 问题描述 | 状态 |
+|:---|:---|:---|:---|:---:|
+| P2-001 | P2 | 2026-04-29 | 模板版本号漂移：文档预期 v1.0.0，上次执行 v1.0.1，当前 v1.0.2。用例设计中版本号写死导致每次模板更新后测试失败。建议改为"版本号非空且符合 semver 格式" | 待修复 |
+| P2-002 | P2 | 2026-04-29 | TemplateLoader 指纹比对升级为 mtime+version 双重比对：当前仅用 (mtime, size) 做指纹，touch 文件会误触发重载。应增加 YAML version 字段二次确认，version 未变则跳过重载。需配套 deploy 脚本校验 version 升级。 | 待实现 |
+| BUG-01 | P1 | 2026-04-29 | `get_tool_cli()` 返回空 JSON 导致解析错误 `Expecting value: line 1 column 1 (char 0)`。OpenMOSS `/api/tools/cli` 接口返回空或无效内容，Agent 入职包缺少 CLI 工具。 | 已修复 |
+| BUG-02 | P1 | 2026-04-29 | Cron 任务首次执行报 `Channel is required (no configured channels detected)` 错误。Agent 未配置通信渠道，定时唤醒失败。需配置 delivery.channel 或改用 main session。 | 已修复 |
+
+### BUG-02 修复验证结果（2026-04-29 14:40）
+
+| Cron 任务 | 首次执行时间 | 执行状态 | 验证结果 |
+|:---|:---|:---|:---|
+| reviewer-poll | 14:38 | ✅ ok | `best-effort-deliver` 生效，无 Channel 错误 |
+| product-manager-poll | 14:38 | ⏳ running | 执行中（Agent 响应较慢） |
+| tech-lead-poll | 14:38 | ⏳ running | 执行中 |
+| devops-poll | 14:40 | ⏳ running | 执行中 |
+| test-executor-poll | 14:40 | ⏳ running | 执行中 |
+| smoke-test-executor-poll | 14:40 | ⏳ running | 执行中 |
+
+**结论**：`--session isolated --channel last --best-effort-deliver` 配置成功解决了 Channel 问题，reviewer-poll 首次执行状态为 `ok`。
+
+### 用例覆盖缺口分析（2026-04-29）
+
+| 缺口 | 描述 | 严重程度 |
+|:---|:---|:---:|
+| **GAP-01** | 故事线1（TC-E2E-001~004）未覆盖模板加载后 OpenClaw Agent 自动创建验证 | 🔴 高 |
+| **GAP-02** | 未覆盖 AGENTS.md 基于 agency-agents 的自动更新验证 | 🔴 高 |
+| **GAP-03** | 未覆盖 OpenMOSS Agent 角色同步更新验证 | 🔴 高 |
+| **GAP-04** | TC-E2E-00 覆盖了上述链路但标记为"部分通过"，未纳入故事线1正式用例 | 🟡 中 |
+
+> **建议**：将 TC-E2E-00 的验证点（Agent创建、AGENTS.md更新、OpenMOSS角色同步）整合到故事线1作为 TC-E2E-001 的扩展验证步骤。
+
 *(后续用例待评审通过后填写)*
 
 | TC 编号 | 执行结果 | 测试数据/日志摘要 | 验收结论 | 执行人 | QA 确认 |

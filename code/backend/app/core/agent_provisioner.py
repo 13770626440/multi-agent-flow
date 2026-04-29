@@ -284,6 +284,7 @@ Body: `{{"name": "{role_name}-agent", "role": "{role_name}", "description": "{ro
     async def configure_cron(self, agent_name: str, role_name: str) -> None:
         """
         为 Agent 配置 Cron 定时唤醒任务。
+        BUG-02 修复：配置 delivery.channel 为 "last" 避免 Channel is required 错误
         """
         cron_id = f"{role_name}-poll"
         
@@ -302,12 +303,37 @@ Body: `{{"name": "{role_name}-agent", "role": "{role_name}", "description": "{ro
         schedule = cron_config.get("schedule", "*/15 * * * *")
         message = cron_config.get("message", "Wake up and check tasks.")
         
-        await openclaw_client.add_cron_job(
-            cron_id=cron_id,
-            agent_name=agent_name,
-            schedule=schedule,
-            message=message
-        )
+        # BUG-02 修复：使用 CLI 配置 isolated session + best-effort-deliver 避免 Channel is required 错误
+        cmd = [
+            "docker", "exec", "maf-openclaw-gateway",
+            "openclaw", "cron", "add",
+            "--name", cron_id,
+            "--agent", agent_name,
+            "--cron", schedule,
+            "--message", message,
+            "--session", "isolated",
+            "--channel", "last",
+            "--best-effort-deliver"
+        ]
+        
+        import asyncio
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+            
+            if proc.returncode == 0:
+                logger.info(f"Cron job {cron_id} added successfully with isolated+best-effort delivery.")
+            else:
+                error_msg = stderr.decode().strip()
+                logger.error(f"Failed to add cron job {cron_id}: {error_msg}")
+        except asyncio.TimeoutError:
+            logger.error(f"Cron add timed out for {cron_id}")
+        except Exception as e:
+            logger.error(f"Exception adding cron job {cron_id}: {e}")
 
 # 全局单例
 agent_provisioner = AgentProvisioner()

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # 模板配置
     TEMPLATE_DIR: str = "/app/templates"
     TEMPLATE_DEBOUNCE_SECONDS: float = 1.0  # 文件变更防抖动时间（秒）
+    TEMPLATE_CHECK_INTERVAL_SECONDS: int = 15  # 模板轮询检查间隔（秒）
     
     # Skills 配置
     SKILLS_DIR: str = "/app/skills"  # Skills 目录路径

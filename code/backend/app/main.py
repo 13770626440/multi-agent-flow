@@ -40,22 +40,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Warning: Redis connection error: {e}")
     
-    # 启动 TemplateLoader（监控模板目录）
+    # 启动 TemplateLoader（定时轮询模板目录）
     template_loader = TemplateLoader(settings.TEMPLATE_DIR)
-    
-    # 获取当前事件循环并传递给 TemplateLoader
-    try:
-        loop = asyncio.get_running_loop()
-        if template_loader.start(event_loop=loop):
-            print(f"TemplateLoader started, watching {settings.TEMPLATE_DIR}")
-        else:
-            print("Warning: TemplateLoader failed to start")
-    except RuntimeError:
-        # 如果没有运行中的事件循环
-        if template_loader.start():
-            print(f"TemplateLoader started (no event loop), watching {settings.TEMPLATE_DIR}")
-        else:
-            print("Warning: TemplateLoader failed to start")
+    if await template_loader.start():
+        print(f"TemplateLoader started, watching {settings.TEMPLATE_DIR}")
+    else:
+        print("Warning: TemplateLoader failed to start")
     
     # 启动 SyncEngine 后台循环（状态同步引擎）
     sync_task = asyncio.create_task(sync_engine.start_sync_loop())
@@ -68,7 +58,7 @@ async def lifespan(app: FastAPI):
     
     # 停止 TemplateLoader
     try:
-        template_loader.stop()
+        await template_loader.stop()
         print("TemplateLoader stopped")
     except Exception as e:
         print(f"Warning: Error stopping TemplateLoader: {e}")

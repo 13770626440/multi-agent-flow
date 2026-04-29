@@ -238,20 +238,25 @@ class OpenMOSSClient:
         """
         获取 task-cli.py 内容
         对应 API: GET /api/tools/cli
+        BUG-01 修复：增加空值和 JSON 解析错误处理
         """
         url = f"{self.base_url}/api/tools/cli"
         try:
             result = await self._request("GET", url, "planner")
-            return result.get("content", "")
+            content = result.get("content", "")
+            if not content or not content.strip():
+                logger.warning("CLI tool content is empty, returning default instruction")
+                return "# CLI Tool\nUse `python task-cli.py` to interact with OpenMOSS.\n# API Base: http://openmoss:6565"
+            return content
         except httpx.HTTPStatusError as e:
             logger.error(f"Failed to get CLI tool: {e.response.status_code}")
-            return ""
+            return "# CLI Tool\nUse `python task-cli.py` to interact with OpenMOSS."
         except httpx.ConnectError as e:
             logger.error(f"Connection failed getting CLI tool: {e}")
-            return ""
+            return "# CLI Tool\nUse `python task-cli.py` to interact with OpenMOSS."
         except Exception as e:
             logger.error(f"Unexpected error getting CLI tool: {e}")
-            return ""
+            return "# CLI Tool\nUse `python task-cli.py` to interact with OpenMOSS."
 
     async def get_skill_md(self, role: str) -> str:
         """

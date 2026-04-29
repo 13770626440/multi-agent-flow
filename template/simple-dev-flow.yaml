@@ -1,6 +1,6 @@
 # templates/simple-dev-flow.yaml
 template_id: "simple-dev-flow"
-version: "1.0.2"
+version: "1.0.3"
 description: "简单开发流程模板（含固定、动态、评审节点，支持用户确认）"
 
 # 全局输入
